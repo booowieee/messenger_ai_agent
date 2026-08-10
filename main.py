@@ -49,6 +49,7 @@ async def main():
     logger.info(f"Userbot started successfully as: {me.first_name} (@{me.username or me.id})")
 
     # 4. Clear Webhook & Start Control Bot Polling
+    logger.info(f"Loaded CONTROL_BOT_TOKEN prefix: {settings.CONTROL_BOT_TOKEN[:10]}... (length={len(settings.CONTROL_BOT_TOKEN)})")
     logger.info("Clearing old webhooks for Control Bot...")
     try:
         await control_bot.delete_webhook(drop_pending_updates=True)
