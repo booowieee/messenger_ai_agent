@@ -6,6 +6,7 @@ from aiogram.types import Message, CallbackQuery
 from src.config import settings
 from src.database.connection import async_session_factory
 from src.repositories.chat_repo import ChatRepository
+from src.userbot.client import userbot_client
 from src.control_bot.keyboards.inline import get_whitelist_keyboard, get_back_keyboard
 from src.utils.logger import export_logger as logger
 
@@ -48,8 +49,7 @@ async def cb_add_chat_prompt(call: CallbackQuery, state: FSMContext):
     await state.set_state(AddChatStates.waiting_for_chat_id)
     text = (
         "➕ <b>Добавление Чата в Белый Список</b>\n\n"
-        "Отправьте <b>числовой ID чата</b> (например: <code>123456789</code>) или перешлите любое сообщение из этого чата сюда.\n\n"
-        "<i>Подсказка: Узнать ID любого собеседника можно, посмотрев логи сервера <code>docker compose logs app</code> при входящем сообщении.</i>\n\n"
+        "Отправьте <b>@username</b> (например: <code>@durov</code>), <b>числовой ID</b> (например: <code>123456789</code>) или перешлите любое сообщение из этого чата сюда.\n\n"
         "Напишите /cancel для отмены."
     )
     await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
@@ -70,21 +70,40 @@ async def process_add_chat(message: Message, state: FSMContext):
     chat_title = "Личный диалог"
     username = None
 
-    # Check if forwarded message
-    if message.forward_from_chat:
+    # 1. Forwarded message check
+    if message.forward_from:
+        target_chat_id = message.forward_from.id
+        chat_title = message.forward_from.full_name or message.forward_from.first_name
+        username = message.forward_from.username
+    elif message.forward_from_chat:
         target_chat_id = message.forward_from_chat.id
         chat_title = message.forward_from_chat.title or message.forward_from_chat.username or "Канал/Чат"
         username = message.forward_from_chat.username
-    elif message.forward_from:
-        target_chat_id = message.forward_from.id
-        chat_title = message.forward_from.full_name
-        username = message.forward_from.username
-    elif message.text and (message.text.lstrip('-').isdigit()):
-        target_chat_id = int(message.text.strip())
-        chat_title = f"Чат {target_chat_id}"
+
+    # 2. Text input check (@username, t.me link or raw ID)
+    elif message.text:
+        raw_query = message.text.strip()
+        # Clean t.me link
+        if "t.me/" in raw_query:
+            raw_query = "@" + raw_query.split("t.me/")[-1].strip("/")
+
+        try:
+            # Resolve via Userbot MTProto client
+            tg_chat = await userbot_client.get_chat(raw_query)
+            target_chat_id = tg_chat.id
+            chat_title = tg_chat.first_name or tg_chat.title or f"Чат {tg_chat.id}"
+            if tg_chat.last_name:
+                chat_title += f" {tg_chat.last_name}"
+            username = tg_chat.username
+            logger.info(f"Resolved MTProto chat for query '{raw_query}': ID={target_chat_id}, Title={chat_title}")
+        except Exception as e:
+            logger.warning(f"Could not resolve Telegram chat for '{raw_query}': {e}")
+            if raw_query.lstrip('-').isdigit():
+                target_chat_id = int(raw_query)
+                chat_title = f"Чат {target_chat_id}"
 
     if not target_chat_id:
-        await message.answer("⚠️ Не удалось распознать ID чата. Пожалуйста, введите корректный числовой ID или перешлите сообщение.")
+        await message.answer("⚠️ Не удалось распознать пользователь/чат. Попробуйте отправить <b>@username</b> или числовой ID.")
         return
 
     async with async_session_factory() as session:
@@ -92,7 +111,10 @@ async def process_add_chat(message: Message, state: FSMContext):
         chat = await chat_repo.add_to_whitelist(target_chat_id, chat_title, username)
 
     await state.clear()
-    await message.answer(f"✅ Чат <b>{chat.chat_title}</b> (<code>{chat.chat_id}</code>) успешно добавлен в белый список!", parse_mode="HTML")
+    await message.answer(
+        f"✅ Чат <b>{chat.chat_title}</b> (ID: <code>{chat.chat_id}</code>) успешно добавлен в белый список!",
+        parse_mode="HTML"
+    )
 
 
 @router.callback_query(F.data.startswith("remove_chat_"))
