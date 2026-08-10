@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     TELEGRAM_API_ID: int
     TELEGRAM_API_HASH: str
     USERBOT_SESSION_NAME: str = "userbot_session"
+
+    @field_validator("USERBOT_SESSION_NAME", mode="before")
+    def validate_session_name(cls, v):
+        if not v or not str(v).strip():
+            return "userbot_session"
+        return str(v).strip()
 
     # Telegram Bot API (Control Bot)
     CONTROL_BOT_TOKEN: str
