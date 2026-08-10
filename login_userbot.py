@@ -21,24 +21,29 @@ print(f"Loaded API_ID:   {settings.TELEGRAM_API_ID}")
 print(f"Loaded API_HASH: {settings.TELEGRAM_API_HASH[:6]}... (masked)")
 print("==================================================\n")
 
+# Disguise as Official Telegram Desktop Client to bypass server-side SMS/Code suppression
 app = Client(
     name=settings.USERBOT_SESSION_NAME,
     workdir="sessions",
     api_id=settings.TELEGRAM_API_ID,
     api_hash=settings.TELEGRAM_API_HASH,
+    device_model="Desktop",
+    app_version="4.16.8 x64",
+    system_version="Windows 10",
+    lang_code="ru"
 )
 
 def describe_code_type(code_type: SentCodeType) -> str:
     if code_type == SentCodeType.APP:
-        return "📱 ЧАТ ВНУТРИ ПРИЛОЖЕНИЯ TELEGRAM (Чат 'Служебные уведомления' / 'Telegram Notifications')"
+        return "📱 ЧАТ ВНУТРИ ПРИЛОЖЕНИЯ TELEGRAM (Служебные уведомления / Telegram Notifications)"
     elif code_type == SentCodeType.SMS:
         return "📩 СМС-СООБЩЕНИЕ на ваш мобильный номер"
     elif code_type == SentCodeType.CALL:
-        return "📞 ВХОДЯЩИЙ ЗВОНОК (диктор продиктует код по телефону)"
+        return "📞 ВХОДЯЩИЙ ЗВОНОК (диктор продиктует код)"
     elif code_type == SentCodeType.FLASH_CALL:
-        return "📞 ЗВОНОК-СБРОС (FLASH CALL) - кодом являются последние цифры номера звонящего!"
+        return "📞 ЗВОНОК-СБРОС (последние цифры входящего номера)"
     elif code_type == SentCodeType.EMAIL_CODE:
-        return "📧 ЭЛЕКТРОННАЯ ПОЧТА, привязанная к аккаунту"
+        return "📧 ЭЛЕКТРОННАЯ ПОЧТА"
     return str(code_type)
 
 async def login():
@@ -57,14 +62,13 @@ async def login():
         await app.disconnect()
         return
 
-    print(f"\n⏳ Запрос кода в Telegram для номера {phone}...")
+    print(f"\n⏳ Отправка запроса в Telegram для {phone}...")
     try:
         sent_code = await app.send_code(phone)
         delivery_method = describe_code_type(sent_code.type)
         
         print("\n" + "░" * 60)
-        print(f" 🎯 TELEGRAM ВЫБРАЛ СПОСОБ ДОСТАВКИ:")
-        print(f" -> {delivery_method}")
+        print(f" 🎯 TELEGRAM ОТПРАВИЛ КОД В: {delivery_method}")
         print("░" * 60 + "\n")
     except ApiIdInvalid:
         print("❌ ОШИБКА: Неверный API_ID или API_HASH в .env!")
@@ -75,26 +79,26 @@ async def login():
         await app.disconnect()
         return
     except FloodWait as e:
-        print(f"❌ ОШИБКА: Лимит запросов. Подождите {e.value} секунд.")
+        print(f"❌ TELEGRAM ЗАБЛОКИРОВАЛ ЧАСТЫЕ ЗАПРОСЫ (FloodWait)!")
+        print(f"⏰ Защита Telegram: Нужно подождать {e.value} секунд ({round(e.value/60, 1)} минут) перед следующим запросом!")
         await app.disconnect()
         return
     except Exception as e:
-        print(f"❌ Ошибка отправки: {e}")
+        print(f"❌ Ошибка: {e}")
         await app.disconnect()
         return
 
-    print("Подсказка: Если код не приходит, введите 'r' для повторного запроса через SMS/Звонок.")
-    user_input = input("🔑 Введите 5-значный код (или 'r' для повтора): ").strip()
+    user_input = input("🔑 Введите 5-значный код (или 'r' для повторного запроса СМС): ").strip()
 
     if user_input.lower() == 'r':
-        print("\n⏳ Повторный запрос кода через альтернативный способ...")
+        print("\n⏳ Повторный запрос кода...")
         try:
             sent_code = await app.resend_code(phone, sent_code.phone_code_hash)
             delivery_method = describe_code_type(sent_code.type)
-            print(f"🎯 Альтернативный способ: {delivery_method}")
+            print(f"🎯 Повторный способ: {delivery_method}")
             user_input = input("🔑 Введите 5-значный код: ").strip()
         except Exception as e:
-            print(f"❌ Ошибка повторного запроса: {e}")
+            print(f"❌ Ошибка повтора: {e}")
             await app.disconnect()
             return
 
