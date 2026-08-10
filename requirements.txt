@@ -1,0 +1,21 @@
+# Core Telegram Libraries
+pyrogram>=2.0.106
+tgcrypto>=1.2.5
+aiogram>=3.17.0
+
+# AI Engine
+google-generativeai>=0.8.4
+
+# Database & Storage
+sqlalchemy[asyncio]>=2.0.38
+asyncpg>=0.30.0
+aiosqlite>=0.21.0
+redis>=5.2.1
+
+# Validation & Settings
+pydantic>=2.10.6
+pydantic-settings>=2.7.1
+
+# Utilities & Logging
+loguru>=0.7.3
+python-dotenv>=1.0.1

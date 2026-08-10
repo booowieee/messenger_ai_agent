@@ -1,0 +1,32 @@
+# Environment & Secrets
+.env
+.env.local
+*.session
+*.session-journal
+sessions/
+
+# Python runtime & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Agent CLI internal files & skills
+.agents/
+logs/
+*.log
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
