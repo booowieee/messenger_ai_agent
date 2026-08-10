@@ -12,6 +12,15 @@ from src.control_bot.bot import control_bot, dp
 from src.utils.logger import export_logger as logger
 
 
+def handle_polling_exception(task: asyncio.Task):
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.critical(f"❌ Control Bot Polling crashed with error: {e}")
+
+
 async def main():
     logger.info("==================================================")
     logger.info("    Starting Telegram AI-Userbot Agent Application ")
@@ -39,9 +48,16 @@ async def main():
     me = await userbot_client.get_me()
     logger.info(f"Userbot started successfully as: {me.first_name} (@{me.username or me.id})")
 
-    # 4. Start Control Bot polling and run concurrently
+    # 4. Clear Webhook & Start Control Bot Polling
+    logger.info("Clearing old webhooks for Control Bot...")
+    try:
+        await control_bot.delete_webhook(drop_pending_updates=True)
+    except Exception as e:
+        logger.warning(f"Could not delete webhook: {e}")
+
     logger.info("Starting Control Bot Polling...")
     polling_task = asyncio.create_task(dp.start_polling(control_bot))
+    polling_task.add_done_callback(handle_polling_exception)
     
     try:
         # Wait for shutdown signal via Pyrogram idle

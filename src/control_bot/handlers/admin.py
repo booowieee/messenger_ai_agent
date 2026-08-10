@@ -14,7 +14,10 @@ router = Router()
 
 
 def is_admin(user_id: int) -> bool:
-    return user_id == settings.ADMIN_TELEGRAM_ID
+    try:
+        return int(user_id) == int(settings.ADMIN_TELEGRAM_ID)
+    except Exception:
+        return False
 
 
 @router.message(CommandStart())
@@ -22,7 +25,13 @@ def is_admin(user_id: int) -> bool:
 async def cmd_start(message: Message):
     if not is_admin(message.from_user.id):
         logger.warning(f"Unauthorized access attempt in Control Bot from user_id={message.from_user.id} (Expected ADMIN_TELEGRAM_ID={settings.ADMIN_TELEGRAM_ID})")
-        await message.reply("⛔ Доступ запрещен. Вы не являетесь администратором данного агента.")
+        await message.reply(
+            f"⛔ <b>Доступ запрещен.</b>\n\n"
+            f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n"
+            f"Указанный ADMIN_TELEGRAM_ID в .env: <code>{settings.ADMIN_TELEGRAM_ID}</code>\n\n"
+            f"Укажите ваш правильный ID в файле <code>.env</code> и перезапустите контейнер.",
+            parse_mode="HTML"
+        )
         return
 
     async with async_session_factory() as session:
@@ -102,3 +111,19 @@ async def cb_menu_status(call: CallbackQuery):
 
     await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
     await call.answer()
+
+
+@router.message()
+async def fallback_any_message(message: Message):
+    """Fallback handler so Control Bot ALWAYS responds to any text/command."""
+    logger.info(f"Control Bot received message from user_id={message.from_user.id}: '{message.text}'")
+    if is_admin(message.from_user.id):
+        await cmd_start(message)
+    else:
+        await message.reply(
+            f"⛔ <b>Доступ запрещен.</b>\n\n"
+            f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n"
+            f"Указанный ADMIN_TELEGRAM_ID в .env: <code>{settings.ADMIN_TELEGRAM_ID}</code>\n\n"
+            f"Измените ADMIN_TELEGRAM_ID в .env на ваш реальный ID ({message.from_user.id}) и перезапустите контейнер.",
+            parse_mode="HTML"
+        )

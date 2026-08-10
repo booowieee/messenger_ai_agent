@@ -24,6 +24,18 @@ class Settings(BaseSettings):
     CONTROL_BOT_TOKEN: str
     ADMIN_TELEGRAM_ID: int
 
+    @field_validator("TELEGRAM_API_ID", "ADMIN_TELEGRAM_ID", mode="before")
+    def validate_int_fields(cls, v):
+        if isinstance(v, str):
+            v = v.strip().strip("'\"")
+        return int(v)
+
+    @field_validator("CONTROL_BOT_TOKEN", "TELEGRAM_API_HASH", "GEMINI_API_KEY", mode="before")
+    def validate_str_fields(cls, v):
+        if isinstance(v, str):
+            return v.strip().strip("'\"")
+        return v
+
     # Google Gemini API
     GEMINI_API_KEY: str
     GEMINI_MODEL: str = "gemini-3.6-flash"
