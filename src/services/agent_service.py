@@ -21,7 +21,7 @@ class AgentService:
     async def generate_response(self, chat_id: int, incoming_text: str) -> Optional[str]:
         """
         Generates an AI response for an incoming Telegram message using Google Gemini.
-        Applies system instructions, context window, and exponential backoff retry.
+        Applies system instructions, context window, and exponential backoff retry with model fallback.
         """
         # 1. Record incoming message in history
         await self.context_service.record_user_message(chat_id, incoming_text)
@@ -43,17 +43,16 @@ class AgentService:
         while formatted_history and formatted_history[-1]["role"] != "model":
             formatted_history.pop()
 
-        logger.info(f"Generating Gemini response for chat {chat_id} using model {settings.GEMINI_MODEL}")
-        logger.debug(f"System Instruction: {system_instruction}")
+        # 4. Call Gemini API with Exponential Backoff & Fallback Model
+        models_to_try = [settings.GEMINI_MODEL, "gemini-1.5-flash", "gemini-2.0-flash"]
+        # De-duplicate while preserving order
+        models_to_try = list(dict.fromkeys(models_to_try))
 
-        # 4. Call Gemini API with Exponential Backoff
-        max_retries = 3
-        backoff_factor = 2.0
-
-        for attempt in range(max_retries):
+        for model_name in models_to_try:
+            logger.info(f"Attempting Gemini generation for chat {chat_id} using model '{model_name}'...")
             try:
                 model = genai.GenerativeModel(
-                    model_name=settings.GEMINI_MODEL,
+                    model_name=model_name,
                     system_instruction=system_instruction
                 )
 
@@ -67,17 +66,17 @@ class AgentService:
 
                 response_text = response.text
                 if not response_text or not response_text.strip():
-                    logger.warning("Gemini returned empty response text.")
-                    return None
+                    logger.warning(f"Gemini model '{model_name}' returned empty response text.")
+                    continue
 
                 # 5. Record model response in history
                 await self.context_service.record_model_message(chat_id, response_text)
+                logger.info(f"Successfully generated response from Gemini model '{model_name}'.")
                 return response_text.strip()
 
             except Exception as e:
-                logger.error(f"Gemini API attempt {attempt + 1}/{max_retries} failed: {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(backoff_factor ** attempt)
-                else:
-                    logger.error("All Gemini API retries exhausted.")
-                    return None
+                logger.error(f"Gemini API model '{model_name}' failed for chat {chat_id}: {e}")
+                await asyncio.sleep(1.0)
+
+        logger.error("All Gemini API models failed to generate response.")
+        return None
