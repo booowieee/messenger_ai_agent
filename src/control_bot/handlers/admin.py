@@ -20,6 +20,7 @@ def is_admin(user_id: int) -> bool:
 @router.message(Command("menu"))
 async def cmd_start(message: Message):
     if not is_admin(message.from_user.id):
+        logger.warning(f"Unauthorized access attempt in Control Bot from user_id={message.from_user.id} (Expected ADMIN_TELEGRAM_ID={settings.ADMIN_TELEGRAM_ID})")
         await message.reply("⛔ Доступ запрещен. Вы не являетесь администратором данного агента.")
         return
 
