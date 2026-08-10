@@ -60,7 +60,11 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # Auto-migration for existing databases
-        await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS whitelist_only BOOLEAN DEFAULT TRUE;"))
+        try:
+            await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS whitelist_only BOOLEAN DEFAULT TRUE;"))
+            await conn.execute(text("UPDATE system_settings SET whitelist_only = TRUE WHERE whitelist_only IS NULL;"))
+        except Exception as e:
+            logger.warning(f"Database auto-migration notice: {e}")
 
     async with async_session_factory() as session:
         # Seed default personas
