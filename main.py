@@ -1,4 +1,5 @@
 import asyncio
+import os
 import signal
 import sys
 from pyrogram import idle
@@ -27,6 +28,12 @@ async def main():
     register_userbot_handlers(userbot_client)
 
     # 3. Start Pyrogram Userbot Client
+    session_file_path = os.path.join("sessions", f"{settings.USERBOT_SESSION_NAME}.session")
+    if not os.path.exists(session_file_path):
+        logger.critical(f"❌ ОШИБКА: Файл сессии юзербота '{session_file_path}' НЕ НАЙДЕН!")
+        logger.critical("Сначала выполните однократную авторизацию командой: docker compose run --build --rm app python login_userbot.py")
+        sys.exit(1)
+
     logger.info("Starting Pyrogram MTProto Userbot Client...")
     await userbot_client.start()
     me = await userbot_client.get_me()
