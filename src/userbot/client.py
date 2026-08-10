@@ -7,7 +7,8 @@ from src.utils.logger import export_logger as logger
 os.makedirs("sessions", exist_ok=True)
 
 userbot_client = Client(
-    name=os.path.join("sessions", settings.USERBOT_SESSION_NAME),
+    name=settings.USERBOT_SESSION_NAME,
+    workdir="sessions",
     api_id=settings.TELEGRAM_API_ID,
     api_hash=settings.TELEGRAM_API_HASH,
 )
