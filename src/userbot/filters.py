@@ -10,8 +10,8 @@ async def custom_ai_active_filter(_, __, message: Message) -> bool:
     if not message.chat or not message.text:
         return False
 
-    # Ignore self messages and command triggers
-    if message.from_user and message.from_user.is_self:
+    # Ignore self/outgoing messages and command triggers
+    if message.outgoing or (message.from_user and message.from_user.is_self):
         return False
 
     if message.text.startswith("/"):

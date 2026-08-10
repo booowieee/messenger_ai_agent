@@ -33,15 +33,14 @@ class AgentService:
             "Ты — полезный и вежливый ассистент, отвечающий от лица пользователя."
         )
 
-        # 3. Retrieve formatted context history (excluding the very last incoming message which we pass to send_message)
+        # 3. Retrieve formatted context history
         formatted_history = await self.context_service.get_formatted_history(chat_id, limit=settings.DEFAULT_CONTEXT_WINDOW_LIMIT)
         
-        # Remove the latest incoming message from history passed to start_chat, as send_message will process it
-        if formatted_history and formatted_history[-1]["role"] == "user":
-            formatted_history.pop()
+        # Ensure history passed to start_chat starts with 'user' and ends with 'model'
+        while formatted_history and formatted_history[0]["role"] != "user":
+            formatted_history.pop(0)
 
-        # Ensure history ends with 'model' if not empty (Gemini start_chat requirement)
-        if formatted_history and formatted_history[-1]["role"] == "user":
+        while formatted_history and formatted_history[-1]["role"] != "model":
             formatted_history.pop()
 
         logger.info(f"Generating Gemini response for chat {chat_id} using model {settings.GEMINI_MODEL}")

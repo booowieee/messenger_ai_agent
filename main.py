@@ -34,16 +34,16 @@ async def main():
 
     # 4. Start Control Bot polling and run concurrently
     logger.info("Starting Control Bot Polling...")
+    polling_task = asyncio.create_task(dp.start_polling(control_bot))
     
     try:
-        # Run Aiogram polling and keep Pyrogram idle concurrently
-        await asyncio.gather(
-            dp.start_polling(control_bot),
-            idle()
-        )
+        # Wait for shutdown signal via Pyrogram idle
+        await idle()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutdown signal received.")
     finally:
+        logger.info("Stopping Control Bot Polling...")
+        polling_task.cancel()
         logger.info("Stopping Pyrogram Userbot...")
         await userbot_client.stop()
         logger.info("Closing Database Engine...")
