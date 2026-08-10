@@ -1,7 +1,7 @@
 from typing import AsyncGenerator
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from src.config import settings
 from src.database.models import Base, Persona, SystemSettings
@@ -59,6 +59,8 @@ async def init_db():
     logger.info("Initializing database schemas...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Auto-migration for existing databases
+        await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS whitelist_only BOOLEAN DEFAULT TRUE;"))
 
     async with async_session_factory() as session:
         # Seed default personas
