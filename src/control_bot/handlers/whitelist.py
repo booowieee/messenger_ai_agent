@@ -31,11 +31,11 @@ async def cb_menu_whitelist(call: CallbackQuery):
         active_chats = await chat_repo.list_active_chats()
 
     text = (
-        "📋 **Управление Белым Списком (Whitelist)**\n\n"
+        "📋 <b>Управление Белым Списком (Whitelist)</b>\n\n"
         "ИИ-агент отвечает только в разрешенных ниже диалогах.\n"
         "Нажмите на чат, чтобы просмотреть информацию, или на кнопку 'Удалить'."
     )
-    await call.message.edit_text(text, reply_markup=get_whitelist_keyboard(active_chats), parse_mode="Markdown")
+    await call.message.edit_text(text, reply_markup=get_whitelist_keyboard(active_chats), parse_mode="HTML")
     await call.answer()
 
 
@@ -47,11 +47,11 @@ async def cb_add_chat_prompt(call: CallbackQuery, state: FSMContext):
 
     await state.set_state(AddChatStates.waiting_for_chat_id)
     text = (
-        "➕ **Добавление Чата в Белый Список**\n\n"
-        "Отправьте **ID чата** (например: `123456789`) или перешлите любое сообщение из этого чата сюда.\n\n"
-        "Напишите `/cancel` для отмены."
+        "➕ <b>Добавление Чата в Белый Список</b>\n\n"
+        "Отправьте <b>ID чата</b> (например: <code>123456789</code>) или перешлите любое сообщение из этого чата сюда.\n\n"
+        "Напишите /cancel для отмены."
     )
-    await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
     await call.answer()
 
 
@@ -91,7 +91,7 @@ async def process_add_chat(message: Message, state: FSMContext):
         chat = await chat_repo.add_to_whitelist(target_chat_id, chat_title, username)
 
     await state.clear()
-    await message.answer(f"✅ Чат **{chat.chat_title}** (`{chat.chat_id}`) успешно добавлен в белый список!", parse_mode="Markdown")
+    await message.answer(f"✅ Чат <b>{chat.chat_title}</b> (<code>{chat.chat_id}</code>) успешно добавлен в белый список!", parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("remove_chat_"))

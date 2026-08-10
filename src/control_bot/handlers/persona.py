@@ -33,12 +33,12 @@ async def cb_menu_persona(call: CallbackQuery):
         active_id = active_persona.id if active_persona else 0
 
     text = (
-        "🎭 **Настройки Личности (Persona)**\n\n"
-        f"**Текущая активная личность**: {active_persona.name if active_persona else 'Не выбрана'}\n"
-        f"**Системный промпт**:\n`{active_persona.prompt if active_persona else ''}`\n\n"
+        "🎭 <b>Настройки Личности (Persona)</b>\n\n"
+        f"<b>Текущая активная личность</b>: {active_persona.name if active_persona else 'Не выбрана'}\n"
+        f"<b>Системный промпт</b>:\n<code>{active_persona.prompt if active_persona else ''}</code>\n\n"
         "Выберите пресет ниже или нажмите 'Изменить промпт', чтобы задать свои инструкции."
     )
-    await call.message.edit_text(text, reply_markup=get_persona_keyboard(personas, active_id), parse_mode="Markdown")
+    await call.message.edit_text(text, reply_markup=get_persona_keyboard(personas, active_id), parse_mode="HTML")
     await call.answer()
 
 
@@ -62,12 +62,12 @@ async def cb_select_persona(call: CallbackQuery):
     await call.answer(f"Выбрана личность: {active_persona.name}", show_alert=True)
 
     text = (
-        "🎭 **Настройки Личности (Persona)**\n\n"
-        f"**Текущая активная личность**: {active_persona.name}\n"
-        f"**Системный промпт**:\n`{active_persona.prompt}`\n\n"
+        "🎭 <b>Настройки Личности (Persona)</b>\n\n"
+        f"<b>Текущая активная личность</b>: {active_persona.name}\n"
+        f"<b>Системный промпт</b>:\n<code>{active_persona.prompt}</code>\n\n"
         "Выберите пресет ниже или нажмите 'Изменить промпт', чтобы задать свои инструкции."
     )
-    await call.message.edit_text(text, reply_markup=get_persona_keyboard(personas, persona_id), parse_mode="Markdown")
+    await call.message.edit_text(text, reply_markup=get_persona_keyboard(personas, persona_id), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "edit_persona_prompt")
@@ -78,12 +78,12 @@ async def cb_edit_persona_prompt(call: CallbackQuery, state: FSMContext):
 
     await state.set_state(EditPersonaStates.waiting_for_prompt)
     text = (
-        "✏️ **Редактирование Промпта Личности**\n\n"
+        "✏️ <b>Редактирование Промпта Личности</b>\n\n"
         "Отправьте новый текстовый промпт (системную инструкцию) для ИИ-агента.\n"
-        "Например: *«Ты — вежливый помощник. Отвечаешь коротко, дружелюбно, используешь смайлики.»*\n\n"
-        "Отправьте `/cancel` для отмены."
+        "Например: <i>«Ты — вежливый помощник. Отвечаешь коротко, дружелюбно, используешь смайлики.»</i>\n\n"
+        "Отправьте /cancel для отмены."
     )
-    await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
+    await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
     await call.answer()
 
 
@@ -109,4 +109,4 @@ async def process_new_prompt(message: Message, state: FSMContext):
             await persona_repo.update_persona_prompt(active_persona.id, new_prompt)
 
     await state.clear()
-    await message.answer("✅ Системный промпт личности успешно обновлен!", parse_mode="Markdown")
+    await message.answer("✅ Системный промпт личности успешно обновлен!", parse_mode="HTML")
