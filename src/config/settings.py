@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Google Gemini API
     GEMINI_API_KEY: str
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.6-flash"
 
     # Database & Cache
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/messenger_ai"
