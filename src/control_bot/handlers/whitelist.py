@@ -48,7 +48,8 @@ async def cb_add_chat_prompt(call: CallbackQuery, state: FSMContext):
     await state.set_state(AddChatStates.waiting_for_chat_id)
     text = (
         "➕ <b>Добавление Чата в Белый Список</b>\n\n"
-        "Отправьте <b>ID чата</b> (например: <code>123456789</code>) или перешлите любое сообщение из этого чата сюда.\n\n"
+        "Отправьте <b>числовой ID чата</b> (например: <code>123456789</code>) или перешлите любое сообщение из этого чата сюда.\n\n"
+        "<i>Подсказка: Узнать ID любого собеседника можно, посмотрев логи сервера <code>docker compose logs app</code> при входящем сообщении.</i>\n\n"
         "Напишите /cancel для отмены."
     )
     await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
