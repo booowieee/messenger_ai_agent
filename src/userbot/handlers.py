@@ -38,11 +38,15 @@ def register_userbot_handlers(client: Client):
                 logger.info(f"⛔ Message from chat {chat_id} IGNORED: Global AI toggle is OFF in Control Bot.")
                 return
 
-            # 4. Check Whitelist
-            is_whitelisted = await chat_repo.is_whitelisted(chat_id)
-            if not is_whitelisted:
-                logger.info(f"⛔ Message from chat {chat_id} ({user_name}) IGNORED: Chat ID {chat_id} is NOT in Whitelist. Add @{message.chat.username or chat_id} in Control Bot.")
-                return
+            # 4. Check Whitelist Mode
+            whitelist_only = await settings_repo.is_whitelist_only()
+            if whitelist_only:
+                is_whitelisted = await chat_repo.is_whitelisted(chat_id)
+                if not is_whitelisted:
+                    logger.info(f"⛔ Message from chat {chat_id} ({user_name}) IGNORED: Chat ID {chat_id} is NOT in Whitelist. (Tip: You can switch to Global Mode in Control Bot!).")
+                    return
+            else:
+                logger.info(f"🌐 Responding to chat {chat_id} in GLOBAL MODE (Whitelist filter bypassed).")
 
             # 5. Generate AI Response
             logger.info(f"🤖 Generating AI response for chat {chat_id}...")

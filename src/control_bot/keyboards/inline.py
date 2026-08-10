@@ -8,7 +8,7 @@ def get_main_menu_keyboard(is_enabled: bool) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=toggle_text, callback_data="toggle_ai")],
-            [InlineKeyboardButton(text="📋 Белый список чатов", callback_data="menu_whitelist")],
+            [InlineKeyboardButton(text="📋 Настройки режима и списка чатов", callback_data="menu_whitelist")],
             [InlineKeyboardButton(text="🎭 Настройки Личности (Persona)", callback_data="menu_persona")],
             [InlineKeyboardButton(text="ℹ️ Статус системы", callback_data="menu_status")],
         ]
@@ -16,8 +16,12 @@ def get_main_menu_keyboard(is_enabled: bool) -> InlineKeyboardMarkup:
     return keyboard
 
 
-def get_whitelist_keyboard(chats: list[WhitelistChat]) -> InlineKeyboardMarkup:
+def get_whitelist_keyboard(chats: list[WhitelistChat], whitelist_only: bool = True) -> InlineKeyboardMarkup:
     buttons = []
+    
+    mode_text = "🛡️ Режим: Только Белый список" if whitelist_only else "🌐 Режим: Отвечать ВСЕМ в ЛС"
+    buttons.append([InlineKeyboardButton(text=mode_text, callback_data="toggle_mode")])
+
     for chat in chats:
         title = chat.chat_title or f"Chat {chat.chat_id}"
         buttons.append([
@@ -25,7 +29,7 @@ def get_whitelist_keyboard(chats: list[WhitelistChat]) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="❌ Удалить", callback_data=f"remove_chat_{chat.chat_id}")
         ])
 
-    buttons.append([InlineKeyboardButton(text="➕ Добавить чат по ID", callback_data="add_chat_prompt")])
+    buttons.append([InlineKeyboardButton(text="➕ Добавить чат (@username / ID)", callback_data="add_chat_prompt")])
     buttons.append([InlineKeyboardButton(text="◀️ Назад в Главное Меню", callback_data="main_menu")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)

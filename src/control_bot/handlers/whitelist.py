@@ -6,6 +6,7 @@ from aiogram.types import Message, CallbackQuery
 from src.config import settings
 from src.database.connection import async_session_factory
 from src.repositories.chat_repo import ChatRepository
+from src.repositories.settings_repo import SettingsRepository
 from src.userbot.client import userbot_client
 from src.control_bot.keyboards.inline import get_whitelist_keyboard, get_back_keyboard
 from src.utils.logger import export_logger as logger
@@ -29,15 +30,44 @@ async def cb_menu_whitelist(call: CallbackQuery):
 
     async with async_session_factory() as session:
         chat_repo = ChatRepository(session)
+        settings_repo = SettingsRepository(session)
         active_chats = await chat_repo.list_active_chats()
+        whitelist_only = await settings_repo.is_whitelist_only()
+
+    mode_info = "🛡️ <b>Только Белый список</b> (ИИ отвечает только разрешенным диалогам)" if whitelist_only else "🌐 <b>Отвечать ВСЕМ</b> (ИИ отвечает во всех личных сообщениях)"
 
     text = (
-        "📋 <b>Управление Белым Списком (Whitelist)</b>\n\n"
-        "ИИ-агент отвечает только в разрешенных ниже диалогах.\n"
-        "Нажмите на чат, чтобы просмотреть информацию, или на кнопку 'Удалить'."
+        "📋 <b>Управление Режимом и Белым Списком</b>\n\n"
+        f"Текущий режим: {mode_info}\n\n"
+        "Вы можете переключить режим кнопкой ниже или добавить контакты."
     )
-    await call.message.edit_text(text, reply_markup=get_whitelist_keyboard(active_chats), parse_mode="HTML")
+    await call.message.edit_text(text, reply_markup=get_whitelist_keyboard(active_chats, whitelist_only), parse_mode="HTML")
     await call.answer()
+
+
+@router.callback_query(F.data == "toggle_mode")
+async def cb_toggle_mode(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    async with async_session_factory() as session:
+        settings_repo = SettingsRepository(session)
+        chat_repo = ChatRepository(session)
+        new_mode = await settings_repo.toggle_whitelist_only()
+        active_chats = await chat_repo.list_active_chats()
+
+    status_msg = "Режим: Только Белый Список 🛡️" if new_mode else "Режим: Отвечать ВСЕМ в ЛС 🌐"
+    await call.answer(status_msg, show_alert=True)
+
+    mode_info = "🛡️ <b>Только Белый список</b> (ИИ отвечает только разрешенным диалогам)" if new_mode else "🌐 <b>Отвечать ВСЕМ</b> (ИИ отвечает во всех личных сообщениях)"
+
+    text = (
+        "📋 <b>Управление Режимом и Белым Списком</b>\n\n"
+        f"Текущий режим: {mode_info}\n\n"
+        "Вы можете переключить режим кнопкой ниже или добавить контакты."
+    )
+    await call.message.edit_text(text, reply_markup=get_whitelist_keyboard(active_chats, new_mode), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "add_chat_prompt")
@@ -83,12 +113,10 @@ async def process_add_chat(message: Message, state: FSMContext):
     # 2. Text input check (@username, t.me link or raw ID)
     elif message.text:
         raw_query = message.text.strip()
-        # Clean t.me link
         if "t.me/" in raw_query:
             raw_query = "@" + raw_query.split("t.me/")[-1].strip("/")
 
         try:
-            # Resolve via Userbot MTProto client
             tg_chat = await userbot_client.get_chat(raw_query)
             target_chat_id = tg_chat.id
             chat_title = tg_chat.first_name or tg_chat.title or f"Чат {tg_chat.id}"
@@ -127,12 +155,14 @@ async def cb_remove_chat(call: CallbackQuery):
 
     async with async_session_factory() as session:
         chat_repo = ChatRepository(session)
+        settings_repo = SettingsRepository(session)
         success = await chat_repo.remove_from_whitelist(chat_id)
         active_chats = await chat_repo.list_active_chats()
+        whitelist_only = await settings_repo.is_whitelist_only()
 
     if success:
         await call.answer("✅ Чат удален из белого списка", show_alert=True)
     else:
         await call.answer("⚠️ Чат не найден", show_alert=True)
 
-    await call.message.edit_reply_markup(reply_markup=get_whitelist_keyboard(active_chats))
+    await call.message.edit_reply_markup(reply_markup=get_whitelist_keyboard(active_chats, whitelist_only))

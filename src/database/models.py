@@ -29,6 +29,7 @@ class SystemSettings(Base):
     context_window_limit: Mapped[int] = mapped_column(Integer, default=15)
     human_delay_min: Mapped[float] = mapped_column(Float, default=2.0)
     human_delay_max: Mapped[float] = mapped_column(Float, default=6.0)
+    whitelist_only: Mapped[bool] = mapped_column(Boolean, default=True)
 
     active_persona: Mapped[Optional["Persona"]] = relationship("Persona", lazy="selectin")
 
