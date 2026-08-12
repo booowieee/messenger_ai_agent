@@ -1,7 +1,7 @@
 import asyncio
 import os
 import sys
-from pyrogram import idle
+import signal
 
 from src.config import settings
 from src.database.connection import init_db, engine
@@ -9,6 +9,9 @@ from src.userbot.client import userbot_client
 from src.userbot.handlers import register_userbot_handlers
 from src.control_bot.bot import control_bot, dp
 from src.utils.logger import export_logger as logger
+
+# Global event to control graceful shutdown
+shutdown_event = asyncio.Event()
 
 
 def handle_polling_exception(task: asyncio.Task):
@@ -30,6 +33,22 @@ async def userbot_heartbeat_loop():
         except Exception as e:
             logger.error(f"💔 [HEARTBEAT ERROR] Userbot connection lost or unresponsive: {e}")
         await asyncio.sleep(30)
+
+
+def setup_signal_handlers():
+    """Setup OS signal handlers for graceful shutdown without relying on pyrogram.idle()"""
+    loop = asyncio.get_running_loop()
+    
+    def shutdown_handler():
+        logger.info("Received termination signal. Triggering graceful shutdown...")
+        shutdown_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, shutdown_handler)
+        except NotImplementedError:
+            # On Windows signal handlers are not fully supported in asyncio loops sometimes
+            pass
 
 
 async def main():
@@ -72,12 +91,15 @@ async def main():
     logger.info("Starting Control Bot Polling...")
     polling_task = asyncio.create_task(dp.start_polling(control_bot))
     polling_task.add_done_callback(handle_polling_exception)
+
+    # Setup termination signal handlers
+    setup_signal_handlers()
     
     try:
-        # Wait for shutdown signal via Pyrogram idle
-        await idle()
+        # Wait until shutdown event is set (either by OS signal or program logic)
+        await shutdown_event.wait()
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Shutdown signal received.")
+        logger.info("Shutdown initiated by keyboard/system interrupt.")
     finally:
         logger.info("Stopping Control Bot Polling...")
         polling_task.cancel()
