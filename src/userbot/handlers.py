@@ -6,7 +6,8 @@ from pyrogram.handlers import MessageHandler
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message, Sticker
 from pyrogram.enums import ChatAction
-from pyrogram.raw.functions.messages import GetStickers
+from pyrogram.raw.functions.messages import GetStickers, GetStickerSet
+from pyrogram.raw.types import InputStickerSetShortName
 
 from src.database.connection import async_session_factory
 from src.repositories.chat_repo import ChatRepository
@@ -38,11 +39,23 @@ async def get_sticker_by_emoji(client: Client, emoji: str, allowed_packs: list[s
         matching_stickers = []
         for pack in allowed_packs:
             try:
-                stickers = await client.get_stickers(pack)
-                if stickers:
-                    for sticker in stickers:
-                        if sticker.emoji and emoji_char in sticker.emoji:
-                            matching_stickers.append(sticker.file_id)
+                res_set = await client.invoke(
+                    GetStickerSet(
+                        stickerset=InputStickerSetShortName(short_name=pack),
+                        hash=0
+                    )
+                )
+                if res_set and hasattr(res_set, "documents") and res_set.documents:
+                    for doc in res_set.documents:
+                        for attr in doc.attributes:
+                            if hasattr(attr, "alt") and attr.alt:
+                                if emoji_char in attr.alt:
+                                    attributes = {type(i): i for i in doc.attributes}
+                                    sticker = Sticker._parse(client, doc, attributes)
+                                    if asyncio.iscoroutine(sticker):
+                                        sticker = await sticker
+                                    matching_stickers.append(sticker.file_id)
+                                    break
             except Exception as e:
                 logger.warning(f"Failed to fetch stickers from pack '{pack}': {e}")
         
