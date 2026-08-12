@@ -42,7 +42,15 @@ class AgentService:
         ))
 
         # Перебираем доступные модели в случае ошибок с квотами
-        models_to_try = list(dict.fromkeys([settings.GEMINI_MODEL, "gemini-1.5-flash", "gemini-1.5-pro"]))
+        models_to_try = list(dict.fromkeys([
+            settings.GEMINI_MODEL,
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash-002",
+            "gemini-2.0-flash-exp",
+            "gemini-1.5-pro",
+            "gemini-1.5-pro-latest"
+        ]))
         config = types.GenerateContentConfig(system_instruction=system_instruction)
 
         for model_name in models_to_try:
