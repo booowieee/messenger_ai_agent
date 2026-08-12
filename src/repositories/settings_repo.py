@@ -74,3 +74,10 @@ class SettingsRepository:
         await self.session.commit()
         await self.session.refresh(sys_settings)
         return sys_settings
+
+    async def set_active_group_persona(self, persona_id: int) -> SystemSettings:
+        sys_settings = await self.get_settings()
+        sys_settings.active_group_persona_id = persona_id
+        await self.session.commit()
+        await self.session.refresh(sys_settings)
+        return sys_settings

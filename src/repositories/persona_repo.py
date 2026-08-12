@@ -27,6 +27,16 @@ class PersonaRepository:
         default_result = await self.session.execute(select(Persona).where(Persona.is_default == True))
         return default_result.scalar_one_or_none()
 
+    async def get_active_group_persona(self) -> Optional[Persona]:
+        result = await self.session.execute(select(SystemSettings).where(SystemSettings.id == 1))
+        settings_obj = result.scalar_one_or_none()
+        if settings_obj and settings_obj.active_group_persona_id:
+            return await self.get_by_id(settings_obj.active_group_persona_id)
+        
+        # Fallback to default persona
+        default_result = await self.session.execute(select(Persona).where(Persona.is_default == True))
+        return default_result.scalar_one_or_none()
+
     async def create_persona(self, name: str, prompt: str) -> Persona:
         persona = Persona(name=name, prompt=prompt, is_default=False)
         self.session.add(persona)

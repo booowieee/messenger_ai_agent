@@ -26,12 +26,20 @@ class SystemSettings(Base):
     active_persona_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("personas.id", ondelete="SET NULL"), nullable=True
     )
+    active_group_persona_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("personas.id", ondelete="SET NULL"), nullable=True
+    )
     context_window_limit: Mapped[int] = mapped_column(Integer, default=15)
     human_delay_min: Mapped[float] = mapped_column(Float, default=2.0)
     human_delay_max: Mapped[float] = mapped_column(Float, default=6.0)
     whitelist_only: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    active_persona: Mapped[Optional["Persona"]] = relationship("Persona", lazy="selectin")
+    active_persona: Mapped[Optional["Persona"]] = relationship(
+        "Persona", foreign_keys=[active_persona_id], lazy="selectin"
+    )
+    active_group_persona: Mapped[Optional["Persona"]] = relationship(
+        "Persona", foreign_keys=[active_group_persona_id], lazy="selectin"
+    )
 
 
 class Persona(Base):

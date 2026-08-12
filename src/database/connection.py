@@ -63,6 +63,8 @@ async def init_db():
         try:
             await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS whitelist_only BOOLEAN DEFAULT TRUE;"))
             await conn.execute(text("UPDATE system_settings SET whitelist_only = TRUE WHERE whitelist_only IS NULL;"))
+            await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS active_group_persona_id INTEGER REFERENCES personas(id) ON DELETE SET NULL;"))
+            await conn.execute(text("UPDATE system_settings SET active_group_persona_id = active_persona_id WHERE active_group_persona_id IS NULL;"))
         except Exception as e:
             logger.warning(f"Database auto-migration notice: {e}")
 
@@ -97,6 +99,7 @@ async def init_db():
                 id=1,
                 is_enabled=True,
                 active_persona_id=default_persona_id,
+                active_group_persona_id=default_persona_id,
                 context_window_limit=settings.DEFAULT_CONTEXT_WINDOW_LIMIT,
                 human_delay_min=settings.DEFAULT_HUMAN_DELAY_MIN,
                 human_delay_max=settings.DEFAULT_HUMAN_DELAY_MAX

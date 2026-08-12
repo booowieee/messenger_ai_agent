@@ -35,20 +35,34 @@ def get_whitelist_keyboard(chats: list[WhitelistChat], whitelist_only: bool = Tr
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_persona_keyboard(personas: list[Persona], active_persona_id: int) -> InlineKeyboardMarkup:
+def get_persona_mode_keyboard(active_private: str, active_group: str) -> InlineKeyboardMarkup:
+    """Клавиатура выбора режима настройки личности (ЛС или группы)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"💬 Для ЛС: {active_private}", callback_data="menu_persona_private")],
+            [InlineKeyboardButton(text=f"👥 Для групп: {active_group}", callback_data="menu_persona_group")],
+            [InlineKeyboardButton(text="Назад", callback_data="main_menu")]
+        ]
+    )
+
+
+def get_persona_keyboard(personas: list[Persona], active_persona_id: int, is_group: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура со списком личностей для выбора в зависимости от типа чата (ЛС/группа)."""
     buttons = []
+    prefix = "group" if is_group else "private"
+    
     for p in personas:
         is_active = (p.id == active_persona_id)
         mark = "* " if is_active else ""
         buttons.append([
             InlineKeyboardButton(
                 text=f"{mark}{p.name}",
-                callback_data=f"select_persona_{p.id}"
+                callback_data=f"select_{prefix}_persona_{p.id}"
             )
         ])
 
-    buttons.append([InlineKeyboardButton(text="Редактировать промпт", callback_data="edit_persona_prompt")])
-    buttons.append([InlineKeyboardButton(text="Назад", callback_data="main_menu")])
+    buttons.append([InlineKeyboardButton(text="Редактировать промпт", callback_data=f"edit_{prefix}_prompt")])
+    buttons.append([InlineKeyboardButton(text="Назад", callback_data="menu_persona")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
