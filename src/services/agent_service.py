@@ -10,6 +10,7 @@ from src.services.context_service import ContextService
 from src.utils.logger import export_logger as logger
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
+_models_logged = False
 
 
 class AgentService:
@@ -19,6 +20,17 @@ class AgentService:
         self.context_service = ContextService(session)
 
     async def generate_response(self, chat_id: int, incoming_text: str) -> Optional[str]:
+        global _models_logged
+        if not _models_logged:
+            try:
+                # Список доступных моделей для диагностики квот и имен
+                models = client.models.list()
+                model_names = [m.name for m in models]
+                logger.info(f"DEBUG: Available models for this API key: {model_names}")
+                _models_logged = True
+            except Exception as e:
+                logger.error(f"Failed to query available models list: {e}")
+
         # Получаем историю до записи нового сообщения
         formatted_history = await self.context_service.get_formatted_history(chat_id, limit=settings.DEFAULT_CONTEXT_WINDOW_LIMIT)
 
