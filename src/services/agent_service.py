@@ -9,7 +9,6 @@ from src.repositories.persona_repo import PersonaRepository
 from src.services.context_service import ContextService
 from src.utils.logger import export_logger as logger
 
-# Initialize Google Genai client
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
@@ -20,20 +19,17 @@ class AgentService:
         self.context_service = ContextService(session)
 
     async def generate_response(self, chat_id: int, incoming_text: str) -> Optional[str]:
-        # 1. Retrieve formatted context history FIRST (before recording)
+        # Получаем историю до записи нового сообщения
         formatted_history = await self.context_service.get_formatted_history(chat_id, limit=settings.DEFAULT_CONTEXT_WINDOW_LIMIT)
 
-        # 2. Record incoming message in history
         await self.context_service.record_user_message(chat_id, incoming_text)
 
-        # 3. Retrieve active persona for system instruction
         active_persona = await self.persona_repo.get_active_persona()
         system_instruction = (
             active_persona.prompt if active_persona else
             "Ты — полезный и вежливый ассистент, отвечающий от лица владельца аккаунта. Отвечай естественно и кратко."
         )
 
-        # 4. Build contents: history + current message
         contents = []
         for msg in formatted_history:
             contents.append(types.Content(
@@ -45,12 +41,9 @@ class AgentService:
             parts=[types.Part.from_text(text=incoming_text)]
         ))
 
-        # 5. Cascade model fallback with native async
+        # Перебираем доступные модели в случае ошибок с квотами
         models_to_try = list(dict.fromkeys([settings.GEMINI_MODEL, "gemini-2.5-flash", "gemini-2.0-flash"]))
-
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-        )
+        config = types.GenerateContentConfig(system_instruction=system_instruction)
 
         for model_name in models_to_try:
             logger.info(f"Attempting Gemini generation for chat {chat_id} using model '{model_name}'...")

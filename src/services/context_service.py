@@ -1,7 +1,6 @@
 from typing import Any, Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.repositories.history_repo import HistoryRepository
-from src.utils.logger import export_logger as logger
 
 
 class ContextService:
@@ -9,16 +8,12 @@ class ContextService:
         self.history_repo = HistoryRepository(session)
 
     async def get_formatted_history(self, chat_id: int, limit: int = 15) -> List[Dict[str, Any]]:
-        """
-        Retrieves recent message history and formats it for Gemini API.
-        Ensures strict role alternation ('user' -> 'model' -> 'user'...).
-        """
+        # Подготовка истории сообщений для Gemini API с чередованием ролей
         history_records = await self.history_repo.get_recent_history(chat_id, limit)
         summary = await self.history_repo.get_summary(chat_id)
 
         formatted: List[Dict[str, Any]] = []
 
-        # If summary exists, append as initial context
         if summary:
             formatted.append({
                 "role": "user",
@@ -32,11 +27,10 @@ class ContextService:
         for msg in history_records:
             role = "user" if msg.sender == "user" else "model"
             
-            # Gemini API requires non-empty text
             if not msg.text or not msg.text.strip():
                 continue
 
-            # Merge consecutive messages from the same role to maintain strict alternation
+            # Склеиваем сообщения от одного и того же автора подряд
             if formatted and formatted[-1]["role"] == role:
                 formatted[-1]["parts"][0] += f"\n{msg.text}"
             else:

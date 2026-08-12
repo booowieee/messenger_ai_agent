@@ -25,7 +25,7 @@ def is_admin(user_id: int) -> bool:
 @router.callback_query(F.data == "menu_whitelist")
 async def cb_menu_whitelist(call: CallbackQuery):
     if not is_admin(call.from_user.id):
-        await call.answer("⛔ Нет доступа", show_alert=True)
+        await call.answer("Нет доступа", show_alert=True)
         return
 
     async with async_session_factory() as session:
@@ -34,12 +34,12 @@ async def cb_menu_whitelist(call: CallbackQuery):
         active_chats = await chat_repo.list_active_chats()
         whitelist_only = await settings_repo.is_whitelist_only()
 
-    mode_info = "🛡️ <b>Только Белый список</b> (ИИ отвечает только разрешенным диалогам)" if whitelist_only else "🌐 <b>Отвечать ВСЕМ</b> (ИИ отвечает во всех личных сообщениях)"
+    mode_info = "Только Белый список (ответы только выбранным контактам)" if whitelist_only else "Отвечать всем (ответы во всех личных диалогах)"
 
     text = (
-        "📋 <b>Управление Режимом и Белым Списком</b>\n\n"
+        "<b>Настройка белого списка</b>\n\n"
         f"Текущий режим: {mode_info}\n\n"
-        "Вы можете переключить режим кнопкой ниже или добавить контакты."
+        "Вы можете изменить режим работы или добавить новые контакты в список."
     )
     await call.message.edit_text(text, reply_markup=get_whitelist_keyboard(active_chats, whitelist_only), parse_mode="HTML")
     await call.answer()
@@ -48,7 +48,7 @@ async def cb_menu_whitelist(call: CallbackQuery):
 @router.callback_query(F.data == "toggle_mode")
 async def cb_toggle_mode(call: CallbackQuery):
     if not is_admin(call.from_user.id):
-        await call.answer("⛔ Нет доступа", show_alert=True)
+        await call.answer("Нет доступа", show_alert=True)
         return
 
     async with async_session_factory() as session:
@@ -57,15 +57,15 @@ async def cb_toggle_mode(call: CallbackQuery):
         new_mode = await settings_repo.toggle_whitelist_only()
         active_chats = await chat_repo.list_active_chats()
 
-    status_msg = "Режим: Только Белый Список 🛡️" if new_mode else "Режим: Отвечать ВСЕМ в ЛС 🌐"
+    status_msg = "Режим: Только белый список" if new_mode else "Режим: Отвечать всем"
     await call.answer(status_msg, show_alert=True)
 
-    mode_info = "🛡️ <b>Только Белый список</b> (ИИ отвечает только разрешенным диалогам)" if new_mode else "🌐 <b>Отвечать ВСЕМ</b> (ИИ отвечает во всех личных сообщениях)"
+    mode_info = "Только Белый список (ответы только выбранным контактам)" if new_mode else "Отвечать всем (ответы во всех личных диалогах)"
 
     text = (
-        "📋 <b>Управление Режимом и Белым Списком</b>\n\n"
+        "<b>Настройка белого списка</b>\n\n"
         f"Текущий режим: {mode_info}\n\n"
-        "Вы можете переключить режим кнопкой ниже или добавить контакты."
+        "Вы можете изменить режим работы или добавить новые контакты в список."
     )
     await call.message.edit_text(text, reply_markup=get_whitelist_keyboard(active_chats, new_mode), parse_mode="HTML")
 
@@ -73,14 +73,14 @@ async def cb_toggle_mode(call: CallbackQuery):
 @router.callback_query(F.data == "add_chat_prompt")
 async def cb_add_chat_prompt(call: CallbackQuery, state: FSMContext):
     if not is_admin(call.from_user.id):
-        await call.answer("⛔ Нет доступа", show_alert=True)
+        await call.answer("Нет доступа", show_alert=True)
         return
 
     await state.set_state(AddChatStates.waiting_for_chat_id)
     text = (
-        "➕ <b>Добавление Чата в Белый Список</b>\n\n"
-        "Отправьте <b>@username</b> (например: <code>@durov</code>), <b>числовой ID</b> (например: <code>123456789</code>) или перешлите любое сообщение из этого чата сюда.\n\n"
-        "Напишите /cancel для отмены."
+        "<b>Добавление контакта в белый список</b>\n\n"
+        "Отправьте юзернейм (@username), числовой ID (например, 123456789) или перешлите любое сообщение от нужного контакта сюда.\n\n"
+        "Для отмены отправьте /cancel."
     )
     await call.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="HTML")
     await call.answer()
@@ -93,14 +93,13 @@ async def process_add_chat(message: Message, state: FSMContext):
 
     if message.text and message.text.strip() == "/cancel":
         await state.clear()
-        await message.answer("❌ Добавление чата отменено.")
+        await message.answer("Добавление отменено.")
         return
 
     target_chat_id = None
     chat_title = "Личный диалог"
     username = None
 
-    # 1. Forwarded message check
     if message.forward_from:
         target_chat_id = message.forward_from.id
         chat_title = message.forward_from.full_name or message.forward_from.first_name
@@ -109,8 +108,6 @@ async def process_add_chat(message: Message, state: FSMContext):
         target_chat_id = message.forward_from_chat.id
         chat_title = message.forward_from_chat.title or message.forward_from_chat.username or "Канал/Чат"
         username = message.forward_from_chat.username
-
-    # 2. Text input check (@username, t.me link or raw ID)
     elif message.text:
         raw_query = message.text.strip()
         if "t.me/" in raw_query:
@@ -123,15 +120,15 @@ async def process_add_chat(message: Message, state: FSMContext):
             if tg_chat.last_name:
                 chat_title += f" {tg_chat.last_name}"
             username = tg_chat.username
-            logger.info(f"Resolved MTProto chat for query '{raw_query}': ID={target_chat_id}, Title={chat_title}")
+            logger.info(f"Resolved chat '{raw_query}': ID={target_chat_id}, Title={chat_title}")
         except Exception as e:
-            logger.warning(f"Could not resolve Telegram chat for '{raw_query}': {e}")
+            logger.warning(f"Could not resolve chat for '{raw_query}': {e}")
             if raw_query.lstrip('-').isdigit():
                 target_chat_id = int(raw_query)
                 chat_title = f"Чат {target_chat_id}"
 
     if not target_chat_id:
-        await message.answer("⚠️ Не удалось распознать пользователь/чат. Попробуйте отправить <b>@username</b> или числовой ID.")
+        await message.answer("Не удалось найти контакт. Отправьте имя пользователя (@username) или числовой ID.")
         return
 
     async with async_session_factory() as session:
@@ -140,7 +137,7 @@ async def process_add_chat(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        f"✅ Чат <b>{chat.chat_title}</b> (ID: <code>{chat.chat_id}</code>) успешно добавлен в белый список!",
+        f"Чат {chat.chat_title} (ID: <code>{chat.chat_id}</code>) добавлен в белый список.",
         parse_mode="HTML"
     )
 
@@ -148,7 +145,7 @@ async def process_add_chat(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("remove_chat_"))
 async def cb_remove_chat(call: CallbackQuery):
     if not is_admin(call.from_user.id):
-        await call.answer("⛔ Нет доступа", show_alert=True)
+        await call.answer("Нет доступа", show_alert=True)
         return
 
     chat_id = int(call.data.split("remove_chat_")[1])
@@ -161,8 +158,8 @@ async def cb_remove_chat(call: CallbackQuery):
         whitelist_only = await settings_repo.is_whitelist_only()
 
     if success:
-        await call.answer("✅ Чат удален из белого списка", show_alert=True)
+        await call.answer("Чат удален из белого списка", show_alert=True)
     else:
-        await call.answer("⚠️ Чат не найден", show_alert=True)
+        await call.answer("Чат не найден", show_alert=True)
 
     await call.message.edit_reply_markup(reply_markup=get_whitelist_keyboard(active_chats, whitelist_only))

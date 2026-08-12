@@ -16,17 +16,16 @@ def is_admin(user_id: int) -> bool:
 
 @router.message()
 async def fallback_any_message(message: Message):
-    """Fallback handler — MUST be registered LAST so FSM handlers work."""
     logger.info(f"Control Bot fallback received message from user_id={message.from_user.id}: '{message.text}'")
     if is_admin(message.from_user.id):
         await message.reply(
-            "ℹ️ Используйте /start или /menu для открытия панели управления.",
+            "Используйте команду /start или /menu для открытия настроек.",
             parse_mode="HTML"
         )
     else:
         await message.reply(
-            f"⛔ <b>Доступ запрещен.</b>\n\n"
-            f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n"
-            f"Укажите ваш ID в файле <code>.env</code> как ADMIN_TELEGRAM_ID и перезапустите контейнер.",
+            f"Доступ ограничен.\n\n"
+            f"Ваш ID: <code>{message.from_user.id}</code>\n"
+            f"Проверьте настройки в .env и перезапустите контейнер.",
             parse_mode="HTML"
         )
