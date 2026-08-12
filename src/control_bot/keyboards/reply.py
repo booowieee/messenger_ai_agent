@@ -10,6 +10,7 @@ def get_admin_reply_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text="👥 Белый список")
             ],
             [
+                KeyboardButton(text="🖼️ Стикеры"),
                 KeyboardButton(text="⚙️ Статус и Управление")
             ]
         ],

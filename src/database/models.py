@@ -35,6 +35,7 @@ class SystemSettings(Base):
     whitelist_only: Mapped[bool] = mapped_column(Boolean, default=True)
     custom_private_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     custom_group_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sticker_packs: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     active_persona: Mapped[Optional["Persona"]] = relationship(
         "Persona", foreign_keys=[active_persona_id], lazy="selectin"

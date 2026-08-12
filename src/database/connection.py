@@ -67,6 +67,7 @@ async def init_db():
             await conn.execute(text("UPDATE system_settings SET active_group_persona_id = active_persona_id WHERE active_group_persona_id IS NULL;"))
             await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS custom_private_prompt TEXT;"))
             await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS custom_group_prompt TEXT;"))
+            await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS sticker_packs TEXT;"))
             
             # Копируем промпт из связанной активной личности, если кастомный промпт пуст
             await conn.execute(text("""

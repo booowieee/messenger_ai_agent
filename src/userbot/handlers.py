@@ -29,11 +29,28 @@ def _get_chat_lock(chat_id: int) -> asyncio.Lock:
     return _chat_locks[chat_id]
 
 
-async def get_sticker_by_emoji(client: Client, emoji: str):
-    """Ищет подходящий стикер по эмодзи через официальное API Telegram."""
+async def get_sticker_by_emoji(client: Client, emoji: str, allowed_packs: list[str] = None):
+    """Ищет подходящий стикер по эмодзи. 
+    Если заданы allowed_packs, ищет среди них. Иначе ищет глобально."""
+    emoji_char = emoji[0] if emoji else "😊"
+    
+    if allowed_packs:
+        matching_stickers = []
+        for pack in allowed_packs:
+            try:
+                stickers = await client.get_stickers(pack)
+                if stickers:
+                    for sticker in stickers:
+                        if sticker.emoji and emoji_char in sticker.emoji:
+                            matching_stickers.append(sticker.file_id)
+            except Exception as e:
+                logger.warning(f"Failed to fetch stickers from pack '{pack}': {e}")
+        
+        if matching_stickers:
+            return random.choice(matching_stickers)
+        logger.info(f"No stickers with emoji '{emoji_char}' found in allowed packs. Falling back to global search...")
+
     try:
-        # Извлекаем первый символ, если прислали строку из нескольких эмодзи
-        emoji_char = emoji[0] if emoji else "😊"
         res = await client.invoke(GetStickers(emoticon=emoji_char, hash=0))
         if res and hasattr(res, "stickers") and res.stickers:
             doc = random.choice(res.stickers)
@@ -68,9 +85,13 @@ async def process_accumulated_messages_task(chat_id: int, app: Client, user_name
     try:
         async with lock:
             ai_response = None
+            allowed_packs = None
             async with async_session_factory() as session:
                 agent_service = AgentService(session)
                 ai_response = await agent_service.generate_response(chat_id, combined_text)
+                
+                settings_repo = SettingsRepository(session)
+                allowed_packs = await settings_repo.get_sticker_packs()
 
             if not ai_response:
                 logger.warning(f"No AI response generated for chat {chat_id}")
@@ -86,7 +107,7 @@ async def process_accumulated_messages_task(chat_id: int, app: Client, user_name
                 if sticker_match:
                     emoji = sticker_match.group(1).strip()
                     if emoji:
-                        sticker_doc = await get_sticker_by_emoji(app, emoji)
+                        sticker_doc = await get_sticker_by_emoji(app, emoji, allowed_packs)
                     
                     if sticker_doc:
                         # Очищаем текст от всех тегов стикера, так как стикер будет отправлен отдельно

@@ -109,3 +109,38 @@ class SettingsRepository:
         await self.session.commit()
         await self.session.refresh(sys_settings)
         return sys_settings
+
+    async def get_sticker_packs(self) -> list[str]:
+        sys_settings = await self.get_settings()
+        packs_str = getattr(sys_settings, "sticker_packs", None)
+        if not packs_str:
+            return []
+        return [p.strip() for p in packs_str.split(",") if p.strip()]
+
+    async def add_sticker_pack(self, pack: str) -> list[str]:
+        pack = pack.strip()
+        if not pack:
+            return await self.get_sticker_packs()
+        
+        packs = await self.get_sticker_packs()
+        if pack not in packs:
+            packs.append(pack)
+            sys_settings = await self.get_settings()
+            sys_settings.sticker_packs = ",".join(packs)
+            await self.session.commit()
+        return packs
+
+    async def remove_sticker_pack(self, pack: str) -> list[str]:
+        pack = pack.strip()
+        packs = await self.get_sticker_packs()
+        if pack in packs:
+            packs.remove(pack)
+            sys_settings = await self.get_settings()
+            sys_settings.sticker_packs = ",".join(packs) if packs else None
+            await self.session.commit()
+        return packs
+
+    async def clear_sticker_packs(self) -> None:
+        sys_settings = await self.get_settings()
+        sys_settings.sticker_packs = None
+        await self.session.commit()

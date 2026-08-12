@@ -10,6 +10,7 @@ def get_main_menu_keyboard(is_enabled: bool) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=toggle_text, callback_data="toggle_ai")],
             [InlineKeyboardButton(text="Настройки белого списка", callback_data="menu_whitelist")],
             [InlineKeyboardButton(text="Выбор личности (промпта)", callback_data="menu_persona")],
+            [InlineKeyboardButton(text="Настройка стикеров", callback_data="menu_stickers")],
             [InlineKeyboardButton(text="Статус системы", callback_data="menu_status")],
         ]
     )
@@ -71,3 +72,17 @@ def get_back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="main_menu")]]
     )
+
+
+def get_stickers_keyboard(packs: list[str]) -> InlineKeyboardMarkup:
+    buttons = []
+    for pack in packs:
+        buttons.append([
+            InlineKeyboardButton(text=pack, callback_data=f"info_pack_{pack}"),
+            InlineKeyboardButton(text="Удалить", callback_data=f"remove_pack_{pack}")
+        ])
+    buttons.append([InlineKeyboardButton(text="Добавить стикер-пак", callback_data="add_pack_prompt")])
+    if packs:
+        buttons.append([InlineKeyboardButton(text="Очистить все", callback_data="clear_packs")])
+    buttons.append([InlineKeyboardButton(text="Назад", callback_data="main_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
