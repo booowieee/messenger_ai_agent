@@ -4,7 +4,7 @@ import re
 from pyrogram import Client, filters
 from pyrogram.handlers import MessageHandler
 from pyrogram.errors import FloodWait
-from pyrogram.types import Message
+from pyrogram.types import Message, Sticker
 from pyrogram.enums import ChatAction
 from pyrogram.raw.functions.messages import GetStickers
 
@@ -34,9 +34,14 @@ async def get_sticker_by_emoji(client: Client, emoji: str):
     try:
         # Извлекаем первый символ, если прислали строку из нескольких эмодзи
         emoji_char = emoji[0] if emoji else "😊"
-        res = await client.invoke(GetStickers(emojis=emoji_char, hash=0))
+        res = await client.invoke(GetStickers(emoticon=emoji_char, hash=0))
         if res and hasattr(res, "stickers") and res.stickers:
-            return random.choice(res.stickers)
+            doc = random.choice(res.stickers)
+            attributes = {type(i): i for i in doc.attributes}
+            sticker = Sticker._parse(client, doc, attributes)
+            if asyncio.iscoroutine(sticker):
+                sticker = await sticker
+            return sticker.file_id
     except Exception as e:
         logger.warning(f"Failed to fetch sticker for emoji '{emoji}': {e}")
     return None
@@ -72,18 +77,27 @@ async def process_accumulated_messages_task(chat_id: int, app: Client, user_name
                 return
 
             try:
-                # Ищем [Стикер: emoji] в тексте ответа
-                sticker_match = re.search(r"\[Стикер:\s*([^\]]+)\]", ai_response, re.IGNORECASE)
+                # Ищем [Стикер: emoji] в тексте ответа, включая пустые значения (например, [Стикер: ] или [Стикер:])
+                sticker_match = re.search(r"\[Стикер:\s*([^\]]*)\s*\]", ai_response, re.IGNORECASE)
                 
                 sticker_doc = None
                 clean_text = ai_response
                 
                 if sticker_match:
                     emoji = sticker_match.group(1).strip()
-                    sticker_doc = await get_sticker_by_emoji(app, emoji)
+                    if emoji:
+                        sticker_doc = await get_sticker_by_emoji(app, emoji)
+                    
                     if sticker_doc:
-                        # Очищаем текст от тега стикера
-                        clean_text = re.sub(r"\[Стикер:\s*[^\]]+\]", "", ai_response).strip()
+                        # Очищаем текст от всех тегов стикера, так как стикер будет отправлен отдельно
+                        clean_text = re.sub(r"\[Стикер:\s*[^\]]*\]", "", ai_response).strip()
+                    else:
+                        # Если стикер не получен, заменяем тег [Стикер: эмодзи] на сам эмодзи в тексте (или удаляем его, если пустой)
+                        clean_text = re.sub(r"\[Стикер:\s*([^\]]*)\s*\]", lambda m: m.group(1).strip(), ai_response).strip()
+
+                if not clean_text and not sticker_doc:
+                    # Если в итоге сообщение пустое и стикер не найден, отправляем смайлик по умолчанию
+                    clean_text = "😊"
 
                 # 1. Если после очистки остался текст, отправляем его
                 if clean_text:
