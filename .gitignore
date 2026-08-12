@@ -19,6 +19,7 @@ ENV/
 # Agent CLI internal files & skills
 .agents/
 logs/
+logs
 *.log
 
 # IDE & Editor files
