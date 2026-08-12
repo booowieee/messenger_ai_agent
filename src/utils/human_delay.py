@@ -18,7 +18,7 @@ async def simulate_human_response_delay(
     1. A small delay before marking message as read (simulating noticing notification).
     2. Marking the chat history as read.
     3. A small delay before starting to type (thinking).
-    4. Sending typing indicator for a duration matching the message length.
+    4. Sending typing indicator in a loop so it stays active until the message is sent.
     """
     # 1. Задержка перед открытием чата (заметил уведомление)
     initial_delay = random.uniform(1.5, 4.0)
@@ -46,9 +46,15 @@ async def simulate_human_response_delay(
     
     logger.debug(f"Simulating typing for chat {chat_id}: {total_delay:.2f}s")
     
-    try:
-        await client.send_chat_action(chat_id, ChatAction.TYPING)
-    except Exception as e:
-        logger.warning(f"Could not send typing action to chat {chat_id}: {e}")
-
-    await asyncio.sleep(total_delay)
+    # Отправляем статус "печатает" в цикле каждые 4 секунды (Telegram сбрасывает его через 5 сек)
+    # Это гарантирует, что статус пропадет ровно в момент прихода сообщения.
+    elapsed = 0.0
+    while elapsed < total_delay:
+        try:
+            await client.send_chat_action(chat_id, ChatAction.TYPING)
+        except Exception as e:
+            logger.warning(f"Could not send typing action: {e}")
+            
+        sleep_chunk = min(4.0, total_delay - elapsed)
+        await asyncio.sleep(sleep_chunk)
+        elapsed += sleep_chunk
