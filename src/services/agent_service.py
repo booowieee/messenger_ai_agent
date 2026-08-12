@@ -36,19 +36,18 @@ class AgentService:
 
         await self.context_service.record_user_message(chat_id, incoming_text)
 
-        is_group = (chat_id < 0)
-        active_persona = None
-        if is_group:
-            active_persona = await self.persona_repo.get_active_group_persona()
-            if not active_persona:
-                active_persona = await self.persona_repo.get_active_persona()
-        else:
-            active_persona = await self.persona_repo.get_active_persona()
+        from src.repositories.settings_repo import SettingsRepository
+        settings_repo = SettingsRepository(self.session)
+        sys_settings = await settings_repo.get_settings()
 
-        system_instruction = (
-            active_persona.prompt if active_persona else
-            "Ты — полезный и вежливый ассистент, отвечающий от лица владельца аккаунта. Отвечай естественно и кратко."
-        )
+        is_group = (chat_id < 0)
+        if is_group:
+            system_instruction = sys_settings.custom_group_prompt or sys_settings.custom_private_prompt
+        else:
+            system_instruction = sys_settings.custom_private_prompt
+
+        if not system_instruction:
+            system_instruction = "Ты — полезный и вежливый ассистент, отвечающий от лица владельца аккаунта. Отвечай естественно и кратко."
 
         contents = []
         for msg in formatted_history:

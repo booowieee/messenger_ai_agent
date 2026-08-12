@@ -54,12 +54,15 @@ async def cb_menu_persona_private(call: CallbackQuery):
         return
 
     async with async_session_factory() as session:
+        settings_repo = SettingsRepository(session)
         persona_repo = PersonaRepository(session)
+        sys_settings = await settings_repo.get_settings()
+        
         personas = await persona_repo.list_all()
         active_persona = await persona_repo.get_active_persona()
-        active_id = active_persona.id if active_persona else 0
+        active_id = sys_settings.active_persona_id or 0
+        prompt_text = sys_settings.custom_private_prompt or ""
 
-    prompt_text = active_persona.prompt if active_persona else ""
     if len(prompt_text) > 250:
         prompt_text = prompt_text[:250] + "..."
     escaped_prompt = html.escape(prompt_text)
@@ -81,12 +84,15 @@ async def cb_menu_persona_group(call: CallbackQuery):
         return
 
     async with async_session_factory() as session:
+        settings_repo = SettingsRepository(session)
         persona_repo = PersonaRepository(session)
+        sys_settings = await settings_repo.get_settings()
+        
         personas = await persona_repo.list_all()
         active_persona = await persona_repo.get_active_group_persona()
-        active_id = active_persona.id if active_persona else 0
+        active_id = sys_settings.active_group_persona_id or 0
+        prompt_text = sys_settings.custom_group_prompt or ""
 
-    prompt_text = active_persona.prompt if active_persona else ""
     if len(prompt_text) > 250:
         prompt_text = prompt_text[:250] + "..."
     escaped_prompt = html.escape(prompt_text)
@@ -114,12 +120,13 @@ async def cb_select_private_persona(call: CallbackQuery):
         persona_repo = PersonaRepository(session)
         
         await settings_repo.set_active_persona(persona_id)
+        sys_settings = await settings_repo.get_settings()
         personas = await persona_repo.list_all()
         active_persona = await persona_repo.get_active_persona()
+        prompt_text = sys_settings.custom_private_prompt or ""
 
     await call.answer(f"ЛС: Выбрана личность {active_persona.name}", show_alert=True)
 
-    prompt_text = active_persona.prompt if active_persona else ""
     if len(prompt_text) > 250:
         prompt_text = prompt_text[:250] + "..."
     escaped_prompt = html.escape(prompt_text)
@@ -146,12 +153,13 @@ async def cb_select_group_persona(call: CallbackQuery):
         persona_repo = PersonaRepository(session)
         
         await settings_repo.set_active_group_persona(persona_id)
+        sys_settings = await settings_repo.get_settings()
         personas = await persona_repo.list_all()
         active_persona = await persona_repo.get_active_group_persona()
+        prompt_text = sys_settings.custom_group_prompt or ""
 
     await call.answer(f"Группы: Выбрана личность {active_persona.name}", show_alert=True)
 
-    prompt_text = active_persona.prompt if active_persona else ""
     if len(prompt_text) > 250:
         prompt_text = prompt_text[:250] + "..."
     escaped_prompt = html.escape(prompt_text)
@@ -218,14 +226,11 @@ async def process_new_prompt(message: Message, state: FSMContext):
     edit_mode = state_data.get("edit_mode", "private")
 
     async with async_session_factory() as session:
-        persona_repo = PersonaRepository(session)
+        settings_repo = SettingsRepository(session)
         if edit_mode == "group":
-            active_persona = await persona_repo.get_active_group_persona()
+            await settings_repo.update_custom_group_prompt(new_prompt)
         else:
-            active_persona = await persona_repo.get_active_persona()
-
-        if active_persona:
-            await persona_repo.update_persona_prompt(active_persona.id, new_prompt)
+            await settings_repo.update_custom_private_prompt(new_prompt)
 
     await state.clear()
     await message.answer("Системный промпт успешно обновлен.", parse_mode="HTML")

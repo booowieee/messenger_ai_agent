@@ -58,8 +58,9 @@ async def process_accumulated_messages_task(chat_id: int, app: Client, user_name
                 # Симулируем человеческую задержку перед прочтением, прочтение и набор
                 await simulate_human_response_delay(app, chat_id, text_length=len(ai_response))
                 
-                # Достаем ID сообщения, на которое нужно ответить реплаем
-                reply_to_id = _last_message_ids.pop(chat_id, None)
+                # Достаем ID сообщения, на которое нужно ответить реплаем (только для групповых чатов)
+                is_group = (chat_id < 0)
+                reply_to_id = _last_message_ids.pop(chat_id, None) if is_group else None
                 await app.send_message(chat_id, ai_response, reply_to_message_id=reply_to_id)
                 logger.info(f"Userbot sent AI response to chat {chat_id}")
 
@@ -111,9 +112,6 @@ async def handle_incoming_private_message(app: Client, message: Message):
     if chat_id not in _pending_messages:
         _pending_messages[chat_id] = []
     _pending_messages[chat_id].append(user_text)
-    
-    # Сохраняем ID сообщения для реплая
-    _last_message_ids[chat_id] = message.id
 
     # Перезапускаем таймер ожидания (debounce)
     old_task = _debounce_tasks.get(chat_id)

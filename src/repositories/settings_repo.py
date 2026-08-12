@@ -1,7 +1,7 @@
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.database.models import SystemSettings
+from src.database.models import SystemSettings, Persona
 from src.database.connection import redis_client
 from src.utils.logger import export_logger as logger
 
@@ -71,6 +71,13 @@ class SettingsRepository:
     async def set_active_persona(self, persona_id: int) -> SystemSettings:
         sys_settings = await self.get_settings()
         sys_settings.active_persona_id = persona_id
+        
+        # Копируем промпт выбранной личности в кастомный промпт ЛС
+        result = await self.session.execute(select(Persona).where(Persona.id == persona_id))
+        persona = result.scalar_one_or_none()
+        if persona:
+            sys_settings.custom_private_prompt = persona.prompt
+            
         await self.session.commit()
         await self.session.refresh(sys_settings)
         return sys_settings
@@ -78,6 +85,27 @@ class SettingsRepository:
     async def set_active_group_persona(self, persona_id: int) -> SystemSettings:
         sys_settings = await self.get_settings()
         sys_settings.active_group_persona_id = persona_id
+        
+        # Копируем промпт выбранной личности в кастомный промпт групп
+        result = await self.session.execute(select(Persona).where(Persona.id == persona_id))
+        persona = result.scalar_one_or_none()
+        if persona:
+            sys_settings.custom_group_prompt = persona.prompt
+            
+        await self.session.commit()
+        await self.session.refresh(sys_settings)
+        return sys_settings
+
+    async def update_custom_private_prompt(self, prompt: str) -> SystemSettings:
+        sys_settings = await self.get_settings()
+        sys_settings.custom_private_prompt = prompt
+        await self.session.commit()
+        await self.session.refresh(sys_settings)
+        return sys_settings
+
+    async def update_custom_group_prompt(self, prompt: str) -> SystemSettings:
+        sys_settings = await self.get_settings()
+        sys_settings.custom_group_prompt = prompt
         await self.session.commit()
         await self.session.refresh(sys_settings)
         return sys_settings

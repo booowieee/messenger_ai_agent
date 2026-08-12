@@ -65,6 +65,24 @@ async def init_db():
             await conn.execute(text("UPDATE system_settings SET whitelist_only = TRUE WHERE whitelist_only IS NULL;"))
             await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS active_group_persona_id INTEGER REFERENCES personas(id) ON DELETE SET NULL;"))
             await conn.execute(text("UPDATE system_settings SET active_group_persona_id = active_persona_id WHERE active_group_persona_id IS NULL;"))
+            await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS custom_private_prompt TEXT;"))
+            await conn.execute(text("ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS custom_group_prompt TEXT;"))
+            
+            # Копируем промпт из связанной активной личности, если кастомный промпт пуст
+            await conn.execute(text("""
+                UPDATE system_settings 
+                SET custom_private_prompt = (SELECT prompt FROM personas WHERE id = system_settings.active_persona_id)
+                WHERE custom_private_prompt IS NULL;
+            """))
+            await conn.execute(text("""
+                UPDATE system_settings 
+                SET custom_group_prompt = (SELECT prompt FROM personas WHERE id = system_settings.active_group_persona_id)
+                WHERE custom_group_prompt IS NULL;
+            """))
+            # Если всё еще пусто (например, нет личности), пишем стандартный промпт
+            default_prompt = "Ты — вежливый, позитивный и естественный помощник. Отвечаешь кратко и по делу от лица владельца аккаунта. Используешь живой разговорный язык, без канцелярита."
+            await conn.execute(text(f"UPDATE system_settings SET custom_private_prompt = :prompt WHERE custom_private_prompt IS NULL;").bindparams(prompt=default_prompt))
+            await conn.execute(text(f"UPDATE system_settings SET custom_group_prompt = :prompt WHERE custom_group_prompt IS NULL;").bindparams(prompt=default_prompt))
         except Exception as e:
             logger.warning(f"Database auto-migration notice: {e}")
 
@@ -95,11 +113,20 @@ async def init_db():
         
         if not system_settings:
             logger.info("Seeding initial SystemSettings into database...")
+            default_prompt = "Ты — вежливый, позитивный и естественный помощник. Отвечаешь кратко и по делу от лица владельца аккаунта. Используешь живой разговорный язык, без канцелярита."
+            if default_persona_id:
+                res = await session.execute(select(Persona).where(Persona.id == default_persona_id))
+                dp = res.scalar_one_or_none()
+                if dp:
+                    default_prompt = dp.prompt
+
             system_settings = SystemSettings(
                 id=1,
                 is_enabled=True,
                 active_persona_id=default_persona_id,
                 active_group_persona_id=default_persona_id,
+                custom_private_prompt=default_prompt,
+                custom_group_prompt=default_prompt,
                 context_window_limit=settings.DEFAULT_CONTEXT_WINDOW_LIMIT,
                 human_delay_min=settings.DEFAULT_HUMAN_DELAY_MIN,
                 human_delay_max=settings.DEFAULT_HUMAN_DELAY_MAX
