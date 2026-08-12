@@ -1,8 +1,12 @@
 import asyncio
+import random
+import re
 from pyrogram import Client, filters
 from pyrogram.handlers import MessageHandler
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
+from pyrogram.enums import ChatAction
+from pyrogram.raw.functions.messages import GetStickers
 
 from src.database.connection import async_session_factory
 from src.repositories.chat_repo import ChatRepository
@@ -23,6 +27,19 @@ def _get_chat_lock(chat_id: int) -> asyncio.Lock:
     if chat_id not in _chat_locks:
         _chat_locks[chat_id] = asyncio.Lock()
     return _chat_locks[chat_id]
+
+
+async def get_sticker_by_emoji(client: Client, emoji: str):
+    """Ищет подходящий стикер по эмодзи через официальное API Telegram."""
+    try:
+        # Извлекаем первый символ, если прислали строку из нескольких эмодзи
+        emoji_char = emoji[0] if emoji else "😊"
+        res = await client.invoke(GetStickers(emojis=emoji_char, hash=0))
+        if res and hasattr(res, "stickers") and res.stickers:
+            return random.choice(res.stickers)
+    except Exception as e:
+        logger.warning(f"Failed to fetch sticker for emoji '{emoji}': {e}")
+    return None
 
 
 async def process_accumulated_messages_task(chat_id: int, app: Client, user_name: str):
@@ -55,15 +72,43 @@ async def process_accumulated_messages_task(chat_id: int, app: Client, user_name
                 return
 
             try:
-                # Симулируем человеческую задержку перед прочтением, прочтение и набор
-                await simulate_human_response_delay(app, chat_id, text_length=len(ai_response))
+                # Ищем [Стикер: emoji] в тексте ответа
+                sticker_match = re.search(r"\[Стикер:\s*([^\]]+)\]", ai_response, re.IGNORECASE)
                 
-                # Достаем ID сообщения, на которое нужно ответить реплаем (только для групповых чатов)
-                is_group = (chat_id < 0)
-                reply_to_id = _last_message_ids.pop(chat_id, None) if is_group else None
-                await app.send_message(chat_id, ai_response, reply_to_message_id=reply_to_id)
-                logger.info(f"Userbot sent AI response to chat {chat_id}")
+                sticker_doc = None
+                clean_text = ai_response
+                
+                if sticker_match:
+                    emoji = sticker_match.group(1).strip()
+                    sticker_doc = await get_sticker_by_emoji(app, emoji)
+                    if sticker_doc:
+                        # Очищаем текст от тега стикера
+                        clean_text = re.sub(r"\[Стикер:\s*[^\]]+\]", "", ai_response).strip()
 
+                # 1. Если после очистки остался текст, отправляем его
+                if clean_text:
+                    await simulate_human_response_delay(app, chat_id, text_length=len(clean_text))
+                    
+                    is_group = (chat_id < 0)
+                    reply_to_id = _last_message_ids.pop(chat_id, None) if is_group else None
+                    await app.send_message(chat_id, clean_text, reply_to_message_id=reply_to_id)
+                    logger.info(f"Userbot sent AI text response to chat {chat_id}")
+
+                # 2. Если есть стикер, отправляем его с имитацией выбора стикера
+                if sticker_doc:
+                    try:
+                        await app.send_chat_action(chat_id, ChatAction.CHOOSE_STICKER)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(random.uniform(1.5, 3.0))
+                    
+                    is_group = (chat_id < 0)
+                    # Если текст уже был отправлен, реплай на исходное сообщение вешать не нужно
+                    reply_to_id = _last_message_ids.pop(chat_id, None) if (is_group and not clean_text) else None
+                    await app.send_sticker(chat_id, sticker_doc, reply_to_message_id=reply_to_id)
+                    logger.info(f"Userbot sent AI sticker response to chat {chat_id}")
+
+                # Записываем полный сгенерированный ответ ИИ в историю
                 async with async_session_factory() as session:
                     context_service = ContextService(session)
                     await context_service.record_model_message(chat_id, ai_response)
@@ -86,11 +131,22 @@ async def handle_incoming_private_message(app: Client, message: Message):
     if message.outgoing or (message.from_user and message.from_user.is_self):
         return
 
-    if not message.text or message.text.startswith("/"):
+    # Извлекаем тип сообщения (текст, фото или стикер)
+    user_text = ""
+    if message.text:
+        if message.text.startswith("/"):
+            return
+        user_text = message.text
+    elif message.sticker:
+        emoji = message.sticker.emoji or "😊"
+        user_text = f"[Стикер: {emoji}]"
+    elif message.photo:
+        caption = f": {message.caption}" if message.caption else ""
+        user_text = f"[Фото{caption}]"
+    else:
         return
 
     chat_id = message.chat.id
-    user_text = message.text
     user_name = message.chat.first_name or message.chat.title or "User"
 
     # Быстрая проверка прав, чтобы отсечь сообщения не из белого списка
@@ -127,11 +183,25 @@ async def handle_incoming_group_message(app: Client, message: Message):
     if message.outgoing or (message.from_user and message.from_user.is_self):
         return
 
-    if not message.text or message.text.startswith("/"):
+    # Извлекаем тип сообщения (текст, фото или стикер)
+    user_text = ""
+    is_photo = False
+    
+    if message.text:
+        if message.text.startswith("/"):
+            return
+        user_text = message.text
+    elif message.sticker:
+        emoji = message.sticker.emoji or "😊"
+        user_text = f"[Стикер: {emoji}]"
+    elif message.photo:
+        caption = f": {message.caption}" if message.caption else ""
+        user_text = f"[Фото{caption}]"
+        is_photo = True
+    else:
         return
 
     chat_id = message.chat.id
-    user_text = message.text
     user_name = message.from_user.first_name if message.from_user else "User"
 
     # Проверяем, обращено ли сообщение к нашему юзерботу:
@@ -143,7 +213,14 @@ async def handle_incoming_group_message(app: Client, message: Message):
 
     is_mentioned = False
     me = await app.get_me()
-    if me.username and f"@{me.username}" in user_text:
+    
+    mention_source = ""
+    if message.text:
+        mention_source = message.text
+    elif is_photo and message.caption:
+        mention_source = message.caption
+
+    if me.username and f"@{me.username}" in mention_source:
         is_mentioned = True
 
     # Если это не ответ нам и не упоминание нашего юзернейма, просто игнорируем
