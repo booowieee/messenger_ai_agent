@@ -4,7 +4,8 @@ tgcrypto>=1.2.5
 aiogram>=3.17.0
 
 # AI Engine
-google-generativeai>=0.8.4
+google-genai>=1.0.0
+aiohttp
 
 # Database & Storage
 sqlalchemy[asyncio]>=2.0.38

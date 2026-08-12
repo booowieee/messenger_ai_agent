@@ -113,17 +113,3 @@ async def cb_menu_status(call: CallbackQuery):
     await call.answer()
 
 
-@router.message()
-async def fallback_any_message(message: Message):
-    """Fallback handler so Control Bot ALWAYS responds to any text/command."""
-    logger.info(f"Control Bot received message from user_id={message.from_user.id}: '{message.text}'")
-    if is_admin(message.from_user.id):
-        await cmd_start(message)
-    else:
-        await message.reply(
-            f"⛔ <b>Доступ запрещен.</b>\n\n"
-            f"Ваш Telegram ID: <code>{message.from_user.id}</code>\n"
-            f"Указанный ADMIN_TELEGRAM_ID в .env: <code>{settings.ADMIN_TELEGRAM_ID}</code>\n\n"
-            f"Измените ADMIN_TELEGRAM_ID в .env на ваш реальный ID ({message.from_user.id}) и перезапустите контейнер.",
-            parse_mode="HTML"
-        )
