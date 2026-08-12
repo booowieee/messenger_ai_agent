@@ -1,3 +1,4 @@
+import html
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -32,10 +33,15 @@ async def cb_menu_persona(call: CallbackQuery):
         active_persona = await persona_repo.get_active_persona()
         active_id = active_persona.id if active_persona else 0
 
+    prompt_text = active_persona.prompt if active_persona else ""
+    if len(prompt_text) > 250:
+        prompt_text = prompt_text[:250] + "..."
+    escaped_prompt = html.escape(prompt_text)
+
     text = (
         "<b>Настройка характера ответов (личности)</b>\n\n"
         f"<b>Активный режим</b>: {active_persona.name if active_persona else 'Не выбран'}\n"
-        f"<b>Промпт</b>:\n<code>{active_persona.prompt if active_persona else ''}</code>\n\n"
+        f"<b>Промпт</b>:\n<code>{escaped_prompt}</code>\n\n"
         "Выберите пресет ниже или нажмите 'Изменить промпт', чтобы задать свои инструкции."
     )
     await call.message.edit_text(text, reply_markup=get_persona_keyboard(personas, active_id), parse_mode="HTML")
@@ -61,10 +67,15 @@ async def cb_select_persona(call: CallbackQuery):
 
     await call.answer(f"Выбрана личность: {active_persona.name}", show_alert=True)
 
+    prompt_text = active_persona.prompt if active_persona else ""
+    if len(prompt_text) > 250:
+        prompt_text = prompt_text[:250] + "..."
+    escaped_prompt = html.escape(prompt_text)
+
     text = (
         "<b>Настройка характера ответов (личности)</b>\n\n"
         f"<b>Активный режим</b>: {active_persona.name}\n"
-        f"<b>Промпт</b>:\n<code>{active_persona.prompt}</code>\n\n"
+        f"<b>Промпт</b>:\n<code>{escaped_prompt}</code>\n\n"
         "Выберите пресет ниже или нажмите 'Изменить промпт', чтобы задать свои инструкции."
     )
     await call.message.edit_text(text, reply_markup=get_persona_keyboard(personas, persona_id), parse_mode="HTML")
