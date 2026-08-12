@@ -12,10 +12,11 @@ from src.services.context_service import ContextService
 from src.utils.human_delay import simulate_human_response_delay
 from src.utils.logger import export_logger as logger
 
-# Блокировки и буферы для накопления сообщений (debounce)
+# Блокировки, буферы и ID последних сообщений для реплай-ответов
 _chat_locks: dict[int, asyncio.Lock] = {}
 _pending_messages: dict[int, list[str]] = {}
 _debounce_tasks: dict[int, asyncio.Task] = {}
+_last_message_ids: dict[int, int] = {}
 
 
 def _get_chat_lock(chat_id: int) -> asyncio.Lock:
@@ -56,7 +57,10 @@ async def process_accumulated_messages_task(chat_id: int, app: Client, user_name
             try:
                 # Симулируем человеческую задержку перед прочтением, прочтение и набор
                 await simulate_human_response_delay(app, chat_id, text_length=len(ai_response))
-                await app.send_message(chat_id, ai_response)
+                
+                # Достаем ID сообщения, на которое нужно ответить реплаем
+                reply_to_id = _last_message_ids.pop(chat_id, None)
+                await app.send_message(chat_id, ai_response, reply_to_message_id=reply_to_id)
                 logger.info(f"Userbot sent AI response to chat {chat_id}")
 
                 async with async_session_factory() as session:
@@ -107,6 +111,9 @@ async def handle_incoming_private_message(app: Client, message: Message):
     if chat_id not in _pending_messages:
         _pending_messages[chat_id] = []
     _pending_messages[chat_id].append(user_text)
+    
+    # Сохраняем ID сообщения для реплая
+    _last_message_ids[chat_id] = message.id
 
     # Перезапускаем таймер ожидания (debounce)
     old_task = _debounce_tasks.get(chat_id)
@@ -118,6 +125,70 @@ async def handle_incoming_private_message(app: Client, message: Message):
     logger.info(f"Userbot buffered message in chat {chat_id}. Waiting for silence...")
 
 
+async def handle_incoming_group_message(app: Client, message: Message):
+    if message.outgoing or (message.from_user and message.from_user.is_self):
+        return
+
+    if not message.text or message.text.startswith("/"):
+        return
+
+    chat_id = message.chat.id
+    user_text = message.text
+    user_name = message.from_user.first_name if message.from_user else "User"
+
+    # Проверяем, обращено ли сообщение к нашему юзерботу:
+    is_reply_to_me = False
+    if message.reply_to_message:
+        reply_to = message.reply_to_message
+        if reply_to.from_user and reply_to.from_user.is_self:
+            is_reply_to_me = True
+
+    is_mentioned = False
+    me = await app.get_me()
+    if me.username and f"@{me.username}" in user_text:
+        is_mentioned = True
+
+    # Если это не ответ нам и не упоминание нашего юзернейма, просто игнорируем
+    if not (is_reply_to_me or is_mentioned):
+        return
+
+    # Проверка глобальных настроек и белого списка для группы
+    async with async_session_factory() as session:
+        settings_repo = SettingsRepository(session)
+        chat_repo = ChatRepository(session)
+
+        ai_enabled = await settings_repo.is_ai_enabled()
+        if not ai_enabled:
+            return
+
+        whitelist_only = await settings_repo.is_whitelist_only()
+        if whitelist_only:
+            is_whitelisted = await chat_repo.is_whitelisted(chat_id)
+            if not is_whitelisted:
+                return
+
+    # Форматируем текст, чтобы ИИ понимал, кто именно говорит в группе
+    formatted_text = f"{user_name}: {user_text}"
+
+    # Добавляем в накопительный буфер чата
+    if chat_id not in _pending_messages:
+        _pending_messages[chat_id] = []
+    _pending_messages[chat_id].append(formatted_text)
+    
+    # Сохраняем ID сообщения для реплая
+    _last_message_ids[chat_id] = message.id
+
+    # Перезапускаем таймер ожидания (debounce)
+    old_task = _debounce_tasks.get(chat_id)
+    if old_task and not old_task.done():
+        old_task.cancel()
+
+    new_task = asyncio.create_task(process_accumulated_messages_task(chat_id, app, message.chat.title or "Group"))
+    _debounce_tasks[chat_id] = new_task
+    logger.info(f"Userbot buffered group message in chat {chat_id}. Waiting for silence...")
+
+
 def register_userbot_handlers(client: Client):
     client.add_handler(MessageHandler(handle_incoming_private_message, filters.private), group=0)
+    client.add_handler(MessageHandler(handle_incoming_group_message, filters.group), group=0)
     logger.info("Userbot handlers registered.")

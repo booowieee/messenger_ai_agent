@@ -1,3 +1,4 @@
+import html
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery
@@ -7,7 +8,8 @@ from src.database.connection import async_session_factory
 from src.repositories.settings_repo import SettingsRepository
 from src.repositories.chat_repo import ChatRepository
 from src.repositories.persona_repo import PersonaRepository
-from src.control_bot.keyboards.inline import get_main_menu_keyboard, get_back_keyboard
+from src.control_bot.keyboards.inline import get_main_menu_keyboard, get_back_keyboard, get_persona_keyboard, get_whitelist_keyboard
+from src.control_bot.keyboards.reply import get_admin_reply_keyboard
 from src.utils.logger import export_logger as logger
 
 router = Router()
@@ -31,6 +33,77 @@ async def cmd_start(message: Message):
             f"Проверьте ADMIN_TELEGRAM_ID в файле .env и перезапустите контейнер.",
             parse_mode="HTML"
         )
+        return
+
+    # Сначала отправляем Reply-клавиатуру, чтобы она закрепилась в интерфейсе внизу
+    await message.answer(
+        "Клавиатура управления подключена. Вы можете использовать статичные кнопки внизу чата.",
+        reply_markup=get_admin_reply_keyboard()
+    )
+
+    async with async_session_factory() as session:
+        settings_repo = SettingsRepository(session)
+        is_enabled = await settings_repo.is_ai_enabled()
+
+    text = (
+        "<b>Панель управления автоответчиком</b>\n\n"
+        "Здесь можно настроить автоответы для личного Telegram-аккаунта.\n\n"
+        "• Включение / Выключение автоответов\n"
+        "• Белый список чатов, в которых ИИ будет отвечать\n"
+        "• Системный промпт (личность бота)"
+    )
+    await message.answer(text, reply_markup=get_main_menu_keyboard(is_enabled), parse_mode="HTML")
+
+
+@router.message(F.text == "👤 Настройка личности")
+async def reply_menu_persona(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    async with async_session_factory() as session:
+        persona_repo = PersonaRepository(session)
+        personas = await persona_repo.list_all()
+        active_persona = await persona_repo.get_active_persona()
+        active_id = active_persona.id if active_persona else 0
+
+    prompt_text = active_persona.prompt if active_persona else ""
+    if len(prompt_text) > 250:
+        prompt_text = prompt_text[:250] + "..."
+    escaped_prompt = html.escape(prompt_text)
+
+    text = (
+        "<b>Настройка характера ответов (личности)</b>\n\n"
+        f"<b>Активный режим</b>: {active_persona.name if active_persona else 'Не выбран'}\n"
+        f"<b>Промпт</b>:\n<code>{escaped_prompt}</code>\n\n"
+        "Выберите пресет ниже или нажмите 'Изменить промпт', чтобы задать свои инструкции."
+    )
+    await message.answer(text, reply_markup=get_persona_keyboard(personas, active_id), parse_mode="HTML")
+
+
+@router.message(F.text == "👥 Белый список")
+async def reply_menu_whitelist(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    async with async_session_factory() as session:
+        chat_repo = ChatRepository(session)
+        settings_repo = SettingsRepository(session)
+        active_chats = await chat_repo.list_active_chats()
+        whitelist_only = await settings_repo.is_whitelist_only()
+
+    mode_info = "Только Белый список (ответы только выбранным контактам)" if whitelist_only else "Отвечать всем (ответы во всех личных диалогах)"
+
+    text = (
+        "<b>Настройка белого списка</b>\n\n"
+        f"Текущий режим: {mode_info}\n\n"
+        "Вы можете изменить режим работы или добавить новые контакты в список."
+    )
+    await message.answer(text, reply_markup=get_whitelist_keyboard(active_chats, whitelist_only), parse_mode="HTML")
+
+
+@router.message(F.text == "⚙️ Статус и Управление")
+async def reply_menu_status(message: Message):
+    if not is_admin(message.from_user.id):
         return
 
     async with async_session_factory() as session:
