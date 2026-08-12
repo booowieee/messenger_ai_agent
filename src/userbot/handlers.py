@@ -25,6 +25,9 @@ def register_userbot_handlers(client: Client):
 
     @client.on_message(filters.private)
     async def handle_incoming_private_message(app: Client, message: Message):
+        chat_id = message.chat.id
+        logger.info(f"🔍 [RAW UPDATE] Private message received: id={message.id}, chat_id={chat_id}, outgoing={message.outgoing}, is_self={message.from_user.is_self if message.from_user else 'None'}, text='{message.text}'")
+
         # 1. Ignore outgoing messages
         if message.outgoing or (message.from_user and message.from_user.is_self):
             return
