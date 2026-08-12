@@ -34,6 +34,7 @@ async def get_sticker_by_emoji(client: Client, emoji: str, allowed_packs: list[s
     """Ищет подходящий стикер по эмодзи. 
     Если заданы allowed_packs, ищет среди них. Иначе ищет глобально."""
     emoji_char = emoji[0] if emoji else "😊"
+    logger.info(f"Searching sticker for emoji '{emoji_char}'. Allowed packs: {allowed_packs}")
     
     if allowed_packs:
         matching_stickers = []
@@ -46,6 +47,7 @@ async def get_sticker_by_emoji(client: Client, emoji: str, allowed_packs: list[s
                     )
                 )
                 if res_set and hasattr(res_set, "documents") and res_set.documents:
+                    pack_matches = 0
                     for doc in res_set.documents:
                         for attr in doc.attributes:
                             if hasattr(attr, "alt") and attr.alt:
@@ -54,13 +56,17 @@ async def get_sticker_by_emoji(client: Client, emoji: str, allowed_packs: list[s
                                     sticker = Sticker._parse(client, doc, attributes)
                                     if asyncio.iscoroutine(sticker):
                                         sticker = await sticker
-                                    matching_stickers.append(sticker.file_id)
+                                    matching_stickers.append((sticker.file_id, pack))
+                                    pack_matches += 1
                                     break
+                    logger.info(f"Pack '{pack}' returned {pack_matches} stickers matching emoji '{emoji_char}'")
             except Exception as e:
                 logger.warning(f"Failed to fetch stickers from pack '{pack}': {e}")
         
         if matching_stickers:
-            return random.choice(matching_stickers)
+            chosen_sticker, chosen_pack = random.choice(matching_stickers)
+            logger.info(f"Selected sticker {chosen_sticker} from pack '{chosen_pack}' for emoji '{emoji_char}'")
+            return chosen_sticker
         logger.info(f"No stickers with emoji '{emoji_char}' found in allowed packs. Falling back to global search...")
 
     try:
@@ -71,6 +77,7 @@ async def get_sticker_by_emoji(client: Client, emoji: str, allowed_packs: list[s
             sticker = Sticker._parse(client, doc, attributes)
             if asyncio.iscoroutine(sticker):
                 sticker = await sticker
+            logger.info(f"Selected global sticker {sticker.file_id} for emoji '{emoji_char}'")
             return sticker.file_id
     except Exception as e:
         logger.warning(f"Failed to fetch sticker for emoji '{emoji}': {e}")
