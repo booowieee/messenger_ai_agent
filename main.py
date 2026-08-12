@@ -5,9 +5,9 @@ import signal
 
 from src.config import settings
 from src.database.connection import init_db, engine
-from src.userbot.client import userbot_client
+from src.userbot.client import get_userbot_client
 from src.userbot.handlers import register_userbot_handlers
-from src.control_bot.bot import control_bot, dp
+from src.control_bot.bot import get_control_bot
 from src.utils.logger import export_logger as logger
 
 # Global event to control graceful shutdown
@@ -26,6 +26,7 @@ def handle_polling_exception(task: asyncio.Task):
 async def userbot_heartbeat_loop():
     """Periodically queries userbot client status to ensure MTProto update connection is alive."""
     await asyncio.sleep(15)  # Wait for startup
+    userbot_client = get_userbot_client()
     while True:
         try:
             me = await userbot_client.get_me()
@@ -62,6 +63,10 @@ async def main():
     except Exception as e:
         logger.critical(f"Failed to initialize database: {e}")
         sys.exit(1)
+
+    # Instantiate lazy client & bot/dispatcher inside the active event loop
+    userbot_client = get_userbot_client()
+    control_bot, dp = get_control_bot()
 
     # 2. Register Pyrogram Handlers
     register_userbot_handlers(userbot_client)

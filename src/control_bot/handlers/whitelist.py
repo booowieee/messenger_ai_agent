@@ -7,7 +7,7 @@ from src.config import settings
 from src.database.connection import async_session_factory
 from src.repositories.chat_repo import ChatRepository
 from src.repositories.settings_repo import SettingsRepository
-from src.userbot.client import userbot_client
+from src.userbot.client import get_userbot_client
 from src.control_bot.keyboards.inline import get_whitelist_keyboard, get_back_keyboard
 from src.utils.logger import export_logger as logger
 
@@ -117,7 +117,7 @@ async def process_add_chat(message: Message, state: FSMContext):
             raw_query = "@" + raw_query.split("t.me/")[-1].strip("/")
 
         try:
-            tg_chat = await userbot_client.get_chat(raw_query)
+            tg_chat = await get_userbot_client().get_chat(raw_query)
             target_chat_id = tg_chat.id
             chat_title = tg_chat.first_name or tg_chat.title or f"Чат {tg_chat.id}"
             if tg_chat.last_name:
