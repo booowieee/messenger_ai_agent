@@ -20,6 +20,18 @@ def handle_polling_exception(task: asyncio.Task):
         logger.critical(f"❌ Control Bot Polling crashed with error: {e}")
 
 
+async def userbot_heartbeat_loop():
+    """Periodically queries userbot client status to ensure MTProto update connection is alive."""
+    await asyncio.sleep(15)  # Wait for startup
+    while True:
+        try:
+            me = await userbot_client.get_me()
+            logger.info(f"💓 [HEARTBEAT] Userbot MTProto client connection is active: @{me.username or me.id}")
+        except Exception as e:
+            logger.error(f"💔 [HEARTBEAT ERROR] Userbot connection lost or unresponsive: {e}")
+        await asyncio.sleep(30)
+
+
 async def main():
     logger.info("==================================================")
     logger.info("    Starting Telegram AI-Userbot Agent Application ")
@@ -47,6 +59,9 @@ async def main():
     me = await userbot_client.get_me()
     logger.info(f"Userbot started successfully as: {me.first_name} (@{me.username or me.id})")
 
+    # Start userbot heartbeat task
+    heartbeat_task = asyncio.create_task(userbot_heartbeat_loop())
+
     # 4. Clear Webhook & Start Control Bot Polling
     logger.info("Clearing old webhooks for Control Bot...")
     try:
@@ -66,6 +81,8 @@ async def main():
     finally:
         logger.info("Stopping Control Bot Polling...")
         polling_task.cancel()
+        logger.info("Stopping Heartbeat...")
+        heartbeat_task.cancel()
         logger.info("Stopping Pyrogram Userbot...")
         await userbot_client.stop()
         logger.info("Closing Database Engine...")

@@ -1,5 +1,6 @@
 import asyncio
 from pyrogram import Client, filters
+from pyrogram.handlers import MessageHandler
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 
@@ -21,71 +22,83 @@ def _get_chat_lock(chat_id: int) -> asyncio.Lock:
     return _chat_locks[chat_id]
 
 
-def register_userbot_handlers(client: Client):
+async def handle_incoming_private_message(app: Client, message: Message):
+    chat_id = message.chat.id
+    user_text = message.text
+    user_name = message.chat.first_name or message.chat.title or "User"
 
-    @client.on_message(filters.private)
-    async def handle_incoming_private_message(app: Client, message: Message):
-        chat_id = message.chat.id
-        logger.info(f"🔍 [RAW UPDATE] Private message received: id={message.id}, chat_id={chat_id}, outgoing={message.outgoing}, is_self={message.from_user.is_self if message.from_user else 'None'}, text='{message.text}'")
+    logger.info(f"🔍 [RAW UPDATE] Private message received: id={message.id}, chat_id={chat_id}, outgoing={message.outgoing}, is_self={message.from_user.is_self if message.from_user else 'None'}, text='{user_text}'")
 
-        # 1. Ignore outgoing messages
-        if message.outgoing or (message.from_user and message.from_user.is_self):
+    # 1. Ignore outgoing messages
+    if message.outgoing or (message.from_user and message.from_user.is_self):
+        return
+
+    # 2. Ignore non-text or commands
+    if not message.text or message.text.startswith("/"):
+        return
+
+    logger.info(f"📩 USERBOT RECEIVED MESSAGE in chat {chat_id} ({user_name}): '{user_text}'")
+
+    # 3. Check AI toggle and whitelist (separate DB session)
+    async with async_session_factory() as session:
+        settings_repo = SettingsRepository(session)
+        chat_repo = ChatRepository(session)
+
+        ai_enabled = await settings_repo.is_ai_enabled()
+        if not ai_enabled:
+            logger.info(f"⛔ Message from chat {chat_id} IGNORED: Global AI toggle is OFF.")
             return
 
-        # 2. Ignore non-text or commands
-        if not message.text or message.text.startswith("/"):
-            return
+        whitelist_only = await settings_repo.is_whitelist_only()
+        if whitelist_only:
+            is_whitelisted = await chat_repo.is_whitelisted(chat_id)
+            if not is_whitelisted:
+                logger.info(f"⛔ Message from chat {chat_id} ({user_name}) IGNORED: NOT in Whitelist.")
+                return
+        else:
+            logger.info(f"🌐 Responding to chat {chat_id} in GLOBAL MODE.")
 
-        chat_id = message.chat.id
-        user_text = message.text
-        user_name = message.chat.first_name or message.chat.title or "User"
-
-        logger.info(f"📩 USERBOT RECEIVED MESSAGE in chat {chat_id} ({user_name}): '{user_text}'")
-
-        # 3. Check AI toggle and whitelist (separate DB session)
+    # 4. Acquire per-chat lock to prevent parallel processing
+    lock = _get_chat_lock(chat_id)
+    async with lock:
+        # 5. Generate AI response (separate DB session, released quickly)
+        ai_response = None
         async with async_session_factory() as session:
-            settings_repo = SettingsRepository(session)
-            chat_repo = ChatRepository(session)
+            agent_service = AgentService(session)
+            ai_response = await agent_service.generate_response(chat_id, user_text)
 
-            ai_enabled = await settings_repo.is_ai_enabled()
-            if not ai_enabled:
-                logger.info(f"⛔ Message from chat {chat_id} IGNORED: Global AI toggle is OFF.")
-                return
+        if not ai_response:
+            logger.warning(f"⚠️ No AI response generated for chat {chat_id}")
+            return
 
-            whitelist_only = await settings_repo.is_whitelist_only()
-            if whitelist_only:
-                is_whitelisted = await chat_repo.is_whitelisted(chat_id)
-                if not is_whitelisted:
-                    logger.info(f"⛔ Message from chat {chat_id} ({user_name}) IGNORED: NOT in Whitelist.")
-                    return
-            else:
-                logger.info(f"🌐 Responding to chat {chat_id} in GLOBAL MODE.")
+        # 6. Send response to Telegram
+        try:
+            await simulate_human_response_delay(app, chat_id, text_length=len(ai_response))
+            await app.send_message(chat_id, ai_response)
+            logger.info(f"✅ USERBOT SENT AI RESPONSE to chat {chat_id}")
 
-        # 4. Acquire per-chat lock to prevent parallel processing
-        lock = _get_chat_lock(chat_id)
-        async with lock:
-            # 5. Generate AI response (separate DB session, released quickly)
-            ai_response = None
+            # 7. Record model response ONLY after successful send (BUG-6 fix)
             async with async_session_factory() as session:
-                agent_service = AgentService(session)
-                ai_response = await agent_service.generate_response(chat_id, user_text)
+                context_service = ContextService(session)
+                await context_service.record_model_message(chat_id, ai_response)
 
-            if not ai_response:
-                logger.warning(f"⚠️ No AI response generated for chat {chat_id}")
-                return
+        except FloodWait as e:
+            logger.warning(f"⚠️ FloodWait {e.value}s in chat {chat_id}. Response NOT saved to history.")
+        except Exception as e:
+            logger.exception(f"❌ Error sending to chat {chat_id}: {e}")
 
-            # 6. Send response to Telegram
-            try:
-                await simulate_human_response_delay(app, chat_id, text_length=len(ai_response))
-                await app.send_message(chat_id, ai_response)
-                logger.info(f"✅ USERBOT SENT AI RESPONSE to chat {chat_id}")
 
-                # 7. Record model response ONLY after successful send (BUG-6 fix)
-                async with async_session_factory() as session:
-                    context_service = ContextService(session)
-                    await context_service.record_model_message(chat_id, ai_response)
+async def handle_raw_catchall(app: Client, message: Message):
+    """Logs absolutely any message update received by Pyrogram client."""
+    chat_type = message.chat.type if message.chat else "unknown"
+    sender_id = message.from_user.id if message.from_user else "unknown"
+    logger.info(f"🔮 [CATCHALL] Update received: id={message.id}, chat={message.chat.id if message.chat else 'None'} ({chat_type}), sender={sender_id}, outgoing={message.outgoing}, text='{message.text[:50] if message.text else 'None'}'")
 
-            except FloodWait as e:
-                logger.warning(f"⚠️ FloodWait {e.value}s in chat {chat_id}. Response NOT saved to history.")
-            except Exception as e:
-                logger.exception(f"❌ Error sending to chat {chat_id}: {e}")
+
+def register_userbot_handlers(client: Client):
+    # 1. Register raw catchall first (lowest priority, doesn't stop propagation)
+    client.add_handler(MessageHandler(handle_raw_catchall), group=-1)
+
+    # 2. Register main private message handler
+    client.add_handler(MessageHandler(handle_incoming_private_message, filters.private), group=0)
+    logger.info("Pyrogram handlers registered successfully.")
