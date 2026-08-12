@@ -1,6 +1,6 @@
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.handlers import MessageHandler
+from pyrogram.handlers import MessageHandler, RawUpdateHandler
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 
@@ -27,7 +27,7 @@ async def handle_incoming_private_message(app: Client, message: Message):
     user_text = message.text
     user_name = message.chat.first_name or message.chat.title or "User"
 
-    logger.info(f"🔍 [RAW UPDATE] Private message received: id={message.id}, chat_id={chat_id}, outgoing={message.outgoing}, is_self={message.from_user.is_self if message.from_user else 'None'}, text='{user_text}'")
+    logger.info(f"📩 USERBOT RECEIVED MESSAGE in chat {chat_id} ({user_name}): '{user_text}'")
 
     # 1. Ignore outgoing messages
     if message.outgoing or (message.from_user and message.from_user.is_self):
@@ -36,8 +36,6 @@ async def handle_incoming_private_message(app: Client, message: Message):
     # 2. Ignore non-text or commands
     if not message.text or message.text.startswith("/"):
         return
-
-    logger.info(f"📩 USERBOT RECEIVED MESSAGE in chat {chat_id} ({user_name}): '{user_text}'")
 
     # 3. Check AI toggle and whitelist (separate DB session)
     async with async_session_factory() as session:
@@ -95,10 +93,19 @@ async def handle_raw_catchall(app: Client, message: Message):
     logger.info(f"🔮 [CATCHALL] Update received: id={message.id}, chat={message.chat.id if message.chat else 'None'} ({chat_type}), sender={sender_id}, outgoing={message.outgoing}, text='{message.text[:50] if message.text else 'None'}'")
 
 
+async def handle_raw_mtproto(app: Client, update: Any, users: dict, chats: dict):
+    """Logs absolutely any raw MTProto update package received from Telegram servers."""
+    update_name = type(update).__name__
+    logger.info(f"⚡ [RAW MTPROTO] Received low-level update: {update_name}")
+
+
 def register_userbot_handlers(client: Client):
-    # 1. Register raw catchall first (lowest priority, doesn't stop propagation)
+    # 1. Register raw MTProto update logger (lowest level)
+    client.add_handler(RawUpdateHandler(handle_raw_mtproto), group=-2)
+
+    # 2. Register raw Message catchall logger
     client.add_handler(MessageHandler(handle_raw_catchall), group=-1)
 
-    # 2. Register main private message handler
+    # 3. Register main private message handler
     client.add_handler(MessageHandler(handle_incoming_private_message, filters.private), group=0)
     logger.info("Pyrogram handlers registered successfully.")
