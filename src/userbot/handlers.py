@@ -1,7 +1,6 @@
 import asyncio
-from typing import Any
 from pyrogram import Client, filters
-from pyrogram.handlers import MessageHandler, RawUpdateHandler
+from pyrogram.handlers import MessageHandler
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 
@@ -24,12 +23,6 @@ def _get_chat_lock(chat_id: int) -> asyncio.Lock:
 
 
 async def handle_incoming_private_message(app: Client, message: Message):
-    chat_id = message.chat.id
-    user_text = message.text
-    user_name = message.chat.first_name or message.chat.title or "User"
-
-    logger.info(f"📩 USERBOT RECEIVED MESSAGE in chat {chat_id} ({user_name}): '{user_text}'")
-
     # 1. Ignore outgoing messages
     if message.outgoing or (message.from_user and message.from_user.is_self):
         return
@@ -37,6 +30,12 @@ async def handle_incoming_private_message(app: Client, message: Message):
     # 2. Ignore non-text or commands
     if not message.text or message.text.startswith("/"):
         return
+
+    chat_id = message.chat.id
+    user_text = message.text
+    user_name = message.chat.first_name or message.chat.title or "User"
+
+    logger.info(f"📩 USERBOT RECEIVED MESSAGE in chat {chat_id} ({user_name}): '{user_text}'")
 
     # 3. Check AI toggle and whitelist (separate DB session)
     async with async_session_factory() as session:
@@ -87,26 +86,7 @@ async def handle_incoming_private_message(app: Client, message: Message):
             logger.exception(f"❌ Error sending to chat {chat_id}: {e}")
 
 
-async def handle_raw_catchall(app: Client, message: Message):
-    """Logs absolutely any message update received by Pyrogram client."""
-    chat_type = message.chat.type if message.chat else "unknown"
-    sender_id = message.from_user.id if message.from_user else "unknown"
-    logger.info(f"🔮 [CATCHALL] Update received: id={message.id}, chat={message.chat.id if message.chat else 'None'} ({chat_type}), sender={sender_id}, outgoing={message.outgoing}, text='{message.text[:50] if message.text else 'None'}'")
-
-
-async def handle_raw_mtproto(app: Client, update: Any, users: dict, chats: dict):
-    """Logs absolutely any raw MTProto update package received from Telegram servers."""
-    update_name = type(update).__name__
-    logger.info(f"⚡ [RAW MTPROTO] Received low-level update: {update_name}")
-
-
 def register_userbot_handlers(client: Client):
-    # 1. Register raw MTProto update logger (lowest level)
-    client.add_handler(RawUpdateHandler(handle_raw_mtproto), group=-2)
-
-    # 2. Register raw Message catchall logger
-    client.add_handler(MessageHandler(handle_raw_catchall), group=-1)
-
-    # 3. Register main private message handler
+    # Register only main private message handler for clean production logs
     client.add_handler(MessageHandler(handle_incoming_private_message, filters.private), group=0)
     logger.info("Pyrogram handlers registered successfully.")
